@@ -53,14 +53,23 @@
         <h4><iconify-icon icon="solar:camera-bold-duotone"></iconify-icon> Scannez votre document</h4>
         <div class="scanner-help">
             <iconify-icon icon="solar:info-circle-bold-duotone"></iconify-icon>
-            <strong>Documents à une page ou plusieurs pages</strong> — Attestation, permis, actes en 1 page : capturez, validez, puis <em>Suivant</em>.
-            Documents multipages (livret, dossier…) : validez chaque page avec <em>Ajouter une autre page</em> avant de continuer.
+            <strong>Documents à une page ou plusieurs pages</strong> — Après la première page validée, le bouton <em>Suivant</em> apparaît : vous pouvez continuer ou scanner d'autres pages.
+            Documents multipages (livret, dossier…) : validez chaque page avec <em>Ajouter une autre page</em> ou passez à l'OCR quand toutes les pages sont prêtes.
             Vous pouvez <strong>supprimer</strong> une page erronée via l’icône poubelle (étapes Scanner, OCR ou récapitulatif).
             <br><span class="text-muted small">Placez le document à plat, bon éclairage ; détection automatique des contours A4.</span>
         </div>
         <div id="scanPagesSummary" class="scan-pages-summary" aria-live="polite">
             <span id="scanPagesCount" class="scan-pages-summary__count">Aucune page enregistrée</span>
             <ul id="scanPagesList" class="scan-pages-summary__list list-unstyled mb-0"></ul>
+        </div>
+        <div id="scanStepActions" class="scan-step-actions" hidden>
+            <p class="scan-step-actions__hint text-muted small mb-2 mb-md-0">
+                Vous pouvez scanner une autre page ou continuer vers l'extraction du texte (OCR).
+            </p>
+            <button id="nextStep1Bar" type="button" class="btn btn-success fw-semibold" title="Continuer avec les pages enregistrées">
+                <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
+                Suivant
+            </button>
         </div>
         <div class="row">
             <div class="col-lg-6 mb-3">

@@ -323,7 +323,8 @@ function initializeCamera() {
 function setupEventListeners() {
     document.getElementById('captureButton').addEventListener('click', captureImageWithDetection);
     document.getElementById('recaptureButton').addEventListener('click', recaptureImage);
-    document.getElementById('nextStep1').addEventListener('click', () => proceedFromScanStep());
+    document.getElementById('nextStep1')?.addEventListener('click', () => proceedFromScanStep());
+    document.getElementById('nextStep1Bar')?.addEventListener('click', () => proceedFromScanStep());
     updateScanPagesUI();
 
     document.getElementById('nextStep2').addEventListener('click', () => goToStep(3));
@@ -607,6 +608,7 @@ function approximateQuadrilateral(points, width, height) {
 
 function showCropInterface() {
     document.getElementById('previewContainer').style.display = 'block';
+    syncScanStepNextButton();
     drawCropOverlay();
     
     const canvas = document.getElementById('canvas');
@@ -699,8 +701,8 @@ function renderScanPagesListHtml() {
         .map((page, i) => {
             const label = page.page_number ? `Page ${page.page_number}` : `Page ${i + 1}`;
             const deleteBtn = canDelete
-                ? `<button type="button" class="btn btn-sm btn-outline-danger scan-pages-summary__remove" data-remove-page-index="${i}" title="Supprimer ${label}" aria-label="Supprimer ${label}">
-                    <iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon>
+                ? `<button type="button" class="btn btn-sm btn-icon rounded-circle scan-pages-summary__remove" data-remove-page-index="${i}" title="Supprimer ${label}" aria-label="Supprimer ${label}">
+                    <iconify-icon icon="solar:trash-bin-trash-bold" aria-hidden="true"></iconify-icon>
                    </button>`
                 : '';
 
@@ -898,6 +900,26 @@ async function removeScannedPageOnServer(idPage) {
     }
 }
 
+function isScanPreviewVisible() {
+    const preview = document.getElementById('previewContainer');
+    if (!preview) {
+        return false;
+    }
+
+    return preview.style.display === 'block';
+}
+
+function syncScanStepNextButton() {
+    const actions = document.getElementById('scanStepActions');
+    const n = scannedPages.length;
+    if (!actions) {
+        return;
+    }
+
+    const showBar = n > 0 && !isScanPreviewVisible();
+    actions.hidden = !showBar;
+}
+
 function updateScanPagesUI() {
     const countEl = document.getElementById('scanPagesCount');
     const listEl = document.getElementById('scanPagesList');
@@ -944,6 +966,8 @@ function updateScanPagesUI() {
     if (validateBtn && !hasPendingCapture()) {
         validateBtn.style.display = 'none';
     }
+
+    syncScanStepNextButton();
 }
 
 function commitCurrentCaptureToScan(silent = false) {
@@ -1334,6 +1358,7 @@ function cleanupCropInterface() {
 
 function recaptureImage() {
     document.getElementById('previewContainer').style.display = 'none';
+    syncScanStepNextButton();
     const canvas = document.getElementById('canvas');
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
     capturedImageBlob = null;
@@ -3255,8 +3280,11 @@ function goToStep(stepNumber) {
 
     currentStep = stepNumber;
 
-    if (stepNumber === 1 && !document.getElementById('video')?.srcObject) {
-        initializeCamera();
+    if (stepNumber === 1) {
+        syncScanStepNextButton();
+        if (!document.getElementById('video')?.srcObject) {
+            initializeCamera();
+        }
     }
 
     if (stepNumber === 3) {

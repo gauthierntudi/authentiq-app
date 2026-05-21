@@ -205,8 +205,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.35rem 0;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
 }
 
 .encodage-wizard .scan-pages-summary__label {
@@ -216,9 +216,43 @@
 }
 
 .encodage-wizard .scan-pages-summary__remove {
+    --enc-scan-remove-size: 2.125rem;
     flex-shrink: 0;
-    padding: 0.15rem 0.45rem;
+    width: var(--enc-scan-remove-size) !important;
+    height: var(--enc-scan-remove-size) !important;
+    min-width: var(--enc-scan-remove-size);
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    background: #e63946 !important;
+    color: #fff !important;
+    box-shadow: 0 2px 8px rgba(230, 57, 70, 0.35);
     line-height: 1;
+    transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.encodage-wizard .scan-pages-summary__remove iconify-icon {
+    font-size: 1.125rem;
+    color: inherit !important;
+    margin: 0 !important;
+    vertical-align: middle;
+}
+
+.encodage-wizard .scan-pages-summary__remove:hover,
+.encodage-wizard .scan-pages-summary__remove:focus {
+    background: #c1121f !important;
+    color: #fff !important;
+    transform: scale(1.06);
+    box-shadow: 0 4px 12px rgba(193, 18, 31, 0.45);
+}
+
+.encodage-wizard .scan-pages-summary__remove:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 2px;
+}
+
+.encodage-wizard .scan-pages-summary__remove:active {
+    transform: scale(0.96);
 }
 
 .encodage-wizard .scan-pages-summary--compact {
@@ -229,6 +263,28 @@
     color: #0eedee;
     vertical-align: -0.15em;
     margin-right: 0.25rem;
+}
+
+.encodage-wizard .scan-step-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(14, 237, 238, 0.25);
+    background: rgba(14, 237, 238, 0.06);
+}
+
+.encodage-wizard .scan-step-actions[hidden] {
+    display: none !important;
+}
+
+.encodage-wizard .scan-step-actions .btn-success {
+    border-radius: 12px;
+    white-space: nowrap;
 }
 
 .encodage-wizard .scan-pages-summary.is-single .scan-pages-summary__count {
