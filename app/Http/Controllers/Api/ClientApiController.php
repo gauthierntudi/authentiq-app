@@ -60,10 +60,29 @@ class ClientApiController extends Controller
                 'nom_ville' => $c->ville?->nom,
                 'active' => (int) $c->is_active,
                 'photo' => $c->photo ? ltrim(str_replace('../', '', $c->photo), '/') : null,
-                'photo_url' => $this->clientPhotos->photoUrl($c->photo),
+                'photo_url' => $this->clientPhotos->photoUrl($c->photo, $c->id_client),
             ]);
 
         return response()->json(['status' => 'success', 'data' => $clients]);
+    }
+
+    public function photo(int $id): \Symfony\Component\HttpFoundation\Response
+    {
+        $client = Client::query()->find($id);
+
+        if (! $client?->photo) {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        $bytes = $this->clientPhotos->readBytes($client->photo);
+        if ($bytes === null || $bytes === '') {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        return response($bytes, 200, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
     }
 
     public function show(int $id): JsonResponse
@@ -84,7 +103,7 @@ class ClientApiController extends Controller
                 'tel' => $client->tel,
                 'email' => $client->email,
                 'photo' => $client->photo,
-                'photo_url' => $this->clientPhotos->photoUrl($client->photo),
+                'photo_url' => $this->clientPhotos->photoUrl($client->photo, $client->id_client),
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,
                 'numero_passeport' => $client->numero_passeport,
@@ -320,7 +339,7 @@ class ClientApiController extends Controller
                 'nom_complet' => $client->nom_complet,
                 'tel' => $client->tel,
                 'email' => $client->email,
-                'photo_url' => $this->clientPhotos->photoUrl($client->photo),
+                'photo_url' => $this->clientPhotos->photoUrl($client->photo, $client->id_client),
                 'is_active' => (int) $client->is_active,
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,

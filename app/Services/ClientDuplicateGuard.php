@@ -114,7 +114,7 @@ class ClientDuplicateGuard
             'nom_complet' => $client->nom_complet,
             'tel' => $client->tel,
             'email' => $client->email,
-            'photo_url' => $this->clientPhotos->photoUrl($client->photo),
+            'photo_url' => $this->clientPhotos->photoUrl($client->photo, $client->id_client),
             'is_active' => (int) $client->is_active,
             'type_piece_identite' => $client->type_piece_identite,
             'numero_national' => $client->numero_national,

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Client;
+use App\Services\ClientPhotoStorage;
 use App\Services\RekognitionService;
 use Illuminate\Console\Command;
 
@@ -12,7 +13,7 @@ class RekognitionIndexClientsCommand extends Command
 
     protected $description = 'Indexe les photos clients dans la collection Rekognition (recherche par visage)';
 
-    public function handle(RekognitionService $rekognition): int
+    public function handle(RekognitionService $rekognition, ClientPhotoStorage $photos): int
     {
         if (! $rekognition->enabled()) {
             $this->warn('Rekognition désactivé ou credentials AWS manquants.');
@@ -46,6 +47,9 @@ class RekognitionIndexClientsCommand extends Command
             } else {
                 $fail++;
                 $this->warn("Échec client #{$client->id_client} — {$client->nom_complet}");
+                if (! $photos->readBytes($client->photo)) {
+                    $this->line('  → photo illisible sur le disque ('.$client->photo.') — vérifiez AWS_ENDPOINT / bucket.');
+                }
             }
         }
 

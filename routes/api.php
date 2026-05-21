@@ -62,6 +62,7 @@ Route::middleware('web')->group(function () {
         Route::post('/clients/search-by-photo', [ClientApiController::class, 'searchByPhoto']);
         Route::post('/clients/check-duplicates', [ClientApiController::class, 'checkDuplicates']);
         Route::get('/clients', [ClientApiController::class, 'index']);
+        Route::get('/clients/{id}/photo', [ClientApiController::class, 'photo'])->whereNumber('id');
         Route::get('/clients/{id}', [ClientApiController::class, 'show'])->whereNumber('id');
         Route::post('/clients/save', [ClientApiController::class, 'save']);
         Route::post('/clients/verify-otp', [ClientApiController::class, 'verifyOtp']);

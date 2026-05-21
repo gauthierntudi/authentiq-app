@@ -445,7 +445,10 @@ class EncodageWorkflowApiController extends Controller
                 'nom_complet' => $encodage->client?->nom_complet,
                 'tel' => $encodage->client?->tel,
                 'email' => $encodage->client?->email,
-                'photo_url' => $this->clientPhotos->photoUrl($encodage->client?->photo),
+                'photo_url' => $this->clientPhotos->photoUrl(
+                    $encodage->client?->photo,
+                    $encodage->client?->id_client,
+                ),
             ],
             'document' => [
                 'nom_doc' => $encodage->doc?->nom_doc,

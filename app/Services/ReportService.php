@@ -333,7 +333,7 @@ class ReportService
                 'id_encodage' => $e->id_encodage,
                 'status' => $e->status,
                 'client_nom' => $e->client?->nom_complet,
-                'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
+                'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo, $e->client?->id_client),
                 'type_doc' => $e->doc?->nom_doc ?: $e->type_doc,
                 'agent_nom' => $e->user?->nom_complet,
                 'affectation' => $e->affectation ?: $e->commune?->nom,

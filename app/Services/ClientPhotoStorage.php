@@ -36,8 +36,19 @@ class ClientPhotoStorage
         return asset('assets/images/user.jpg');
     }
 
-    public function photoUrl(?string $path): string
+    /**
+     * URL affichable dans le navigateur (évite CORS S3 : proxy Laravel en production).
+     */
+    public function photoUrl(?string $path, ?int $clientId = null): string
     {
+        if (! $path) {
+            return $this->defaultUrl();
+        }
+
+        if ($this->diskName() === 's3' && $clientId !== null && $clientId > 0) {
+            return url('/api/clients/'.$clientId.'/photo');
+        }
+
         return $this->url($path) ?? $this->defaultUrl();
     }
 

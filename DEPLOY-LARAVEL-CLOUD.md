@@ -154,6 +154,8 @@ Les clients importés depuis Valet ont des chemins du type `uploads/clients/...`
 
 Sans migration, la grille clients affiche l’avatar par défaut ; les nouvelles photos prises sur Cloud fonctionnent.
 
+Les photos s’affichent via **`/api/clients/{id}/photo`** (proxy Laravel), pas via URL S3 directe — évite les erreurs CORS / 404 du navigateur sur `*.s3.amazonaws.com`.
+
 ## 10. Commandes manuelles (optionnel, console Cloud)
 
 ```bash

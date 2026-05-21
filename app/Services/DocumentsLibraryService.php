@@ -108,7 +108,7 @@ class DocumentsLibraryService
             $folders[] = [
                 'id_client' => $idClient,
                 'nom_complet' => $client?->nom_complet ?: 'Sans client',
-                'photo_url' => $this->clientPhotos->photoUrl($client?->photo),
+                'photo_url' => $this->clientPhotos->photoUrl($client?->photo, $idClient > 0 ? $idClient : null),
                 'encodages_count' => $items->count(),
                 'pages_count' => $pagesCount,
                 'size_bytes' => $sizeBytes,
@@ -142,7 +142,7 @@ class DocumentsLibraryService
             'id_encodage' => $e->id_encodage,
             'id_client' => (int) ($e->id_client ?? 0),
             'client_nom' => $e->client?->nom_complet ?: 'Sans client',
-            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
+            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo, $e->client?->id_client),
             'type_doc' => $typeDoc,
             'status' => $e->status,
             'numero' => $e->numero,

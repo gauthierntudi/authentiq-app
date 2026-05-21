@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Encodage;
 use App\Services\ClientPhotoStorage;
-use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
 use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
@@ -152,7 +151,7 @@ class EncodageApiController extends Controller
             'status' => $e->status,
             'numero' => $e->numero,
             'client_nom' => $e->client?->nom_complet,
-            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
+            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo, $e->client?->id_client),
             'type_doc' => $typeDoc,
             'nb_pages' => (int) ($e->page_count ?? 0),
             'affectation' => $e->affectation ?: $e->commune?->nom,
