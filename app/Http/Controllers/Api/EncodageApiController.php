@@ -151,7 +151,11 @@ class EncodageApiController extends Controller
             'status' => $e->status,
             'numero' => $e->numero,
             'client_nom' => $e->client?->nom_complet,
-            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo, $e->client?->id_client),
+            'client_photo_url' => $this->clientPhotos->photoUrl(
+                $e->client?->photo,
+                $e->client?->id_client,
+                $e->client?->updated_at?->getTimestamp(),
+            ),
             'type_doc' => $typeDoc,
             'nb_pages' => (int) ($e->page_count ?? 0),
             'affectation' => $e->affectation ?: $e->commune?->nom,

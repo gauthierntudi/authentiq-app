@@ -60,7 +60,12 @@ class ClientApiController extends Controller
                 'nom_ville' => $c->ville?->nom,
                 'active' => (int) $c->is_active,
                 'photo' => $c->photo ? ltrim(str_replace('../', '', $c->photo), '/') : null,
-                'photo_url' => $this->clientPhotos->photoUrl($c->photo, $c->id_client),
+                'photo_url' => $this->clientPhotos->photoUrl(
+                    $c->photo,
+                    $c->id_client,
+                    $c->updated_at?->getTimestamp(),
+                ),
+                'updated_at' => $c->updated_at?->toIso8601String(),
             ]);
 
         return response()->json(['status' => 'success', 'data' => $clients]);
@@ -81,7 +86,8 @@ class ClientApiController extends Controller
 
         return response($bytes, 200, [
             'Content-Type' => 'image/jpeg',
-            'Cache-Control' => 'private, max-age=3600',
+            'Cache-Control' => 'private, no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
         ]);
     }
 
@@ -103,7 +109,11 @@ class ClientApiController extends Controller
                 'tel' => $client->tel,
                 'email' => $client->email,
                 'photo' => $client->photo,
-                'photo_url' => $this->clientPhotos->photoUrl($client->photo, $client->id_client),
+                'photo_url' => $this->clientPhotos->photoUrl(
+                    $client->photo,
+                    $client->id_client,
+                    $client->updated_at?->getTimestamp(),
+                ),
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,
                 'numero_passeport' => $client->numero_passeport,
@@ -193,10 +203,17 @@ class ClientApiController extends Controller
                     $this->indexClientFaceNow($client->fresh(), $photoBytes);
                 }
 
+                $client = $client->fresh();
+
                 return response()->json([
                     'status' => 'success',
                     'message' => 'Client mis à jour.',
                     'client_id' => $id,
+                    'photo_url' => $this->clientPhotos->photoUrl(
+                        $client->photo,
+                        $client->id_client,
+                        $client->updated_at?->getTimestamp(),
+                    ),
                 ]);
             }
 
@@ -337,7 +354,11 @@ class ClientApiController extends Controller
                 'nom_complet' => $client->nom_complet,
                 'tel' => $client->tel,
                 'email' => $client->email,
-                'photo_url' => $this->clientPhotos->photoUrl($client->photo, $client->id_client),
+                'photo_url' => $this->clientPhotos->photoUrl(
+                    $client->photo,
+                    $client->id_client,
+                    $client->updated_at?->getTimestamp(),
+                ),
                 'is_active' => (int) $client->is_active,
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,

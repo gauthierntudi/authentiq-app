@@ -62,7 +62,73 @@ AUTHENTIQ_MAIL_FROM=
 AUTHENTIQ_MAIL_FROM_NAME=Authentiq
 ```
 
-**Object Storage Laravel Cloud** : Resources → Object Storage → attachez un bucket à l’environnement. Cloud injecte `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BUCKET`, etc. Vérifiez après deploy que le bucket n’est pas vide : `php artisan tinker` → `config('filesystems.disks.s3.bucket')`.
+**Object Storage Laravel Cloud** : alternative avec bucket R2 géré par Cloud. Si vous utilisez **votre propre bucket AWS S3** (`authentiq-files3`), voir la section 12 ci-dessous.
+
+## 12. Bucket AWS S3 `authentiq-files3` (console Amazon)
+
+Créer le compartiment suffit ; il reste **vide** tant que l’app n’a pas d’identifiants IAM valides. Aucun objet public n’est requis (les photos passent par `/api/clients/{id}/photo`).
+
+### A. Utilisateur IAM (recommandé)
+
+1. **IAM** → **Utilisateurs** → **Créer un utilisateur** (ex. `authentiq-laravel-cloud`).
+2. **Politique** (JSON) limitée au bucket :
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AuthentiqS3Objects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::authentiq-files3",
+        "arn:aws:s3:::authentiq-files3/*"
+      ]
+    }
+  ]
+}
+```
+
+3. **Clés d’accès** → créer une clé **Application** → noter `AWS_ACCESS_KEY_ID` et `AWS_SECRET_ACCESS_KEY`.
+
+Rekognition / Textract : si activés, attacher aussi les politiques AWS managées ou droits `rekognition:*` / `textract:*` sur la même région (`us-east-1`).
+
+### B. Compartiment S3
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Nom | `authentiq-files3` |
+| Région | `us-east-1` (Virginie du Nord — comme votre console) |
+| Bloquer l’accès public | **Activé** (OK, l’app utilise les clés IAM) |
+| CORS | **Non obligatoire** (affichage via proxy Laravel) |
+
+Rien à « activer » dans l’onglet Objets : après le premier upload réussi, vous verrez des dossiers `clients/`, `fileAuthentiq/`, etc.
+
+### C. Variables Laravel Cloud (Environment)
+
+```env
+AUTHENTIQ_DOCUMENTS_DISK=s3
+AWS_BUCKET=authentiq-files3
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=AKIA...        # utilisateur IAM ci-dessus
+AWS_SECRET_ACCESS_KEY=...
+# Pas de AWS_ENDPOINT pour un vrai bucket S3 AWS (laisser vide)
+```
+
+Puis :
+
+```bash
+php artisan config:clear
+php artisan authentiq:storage-status
+```
+
+Le test doit afficher **Test lecture/écriture S3 : OK**. Ensuite ré-uploader une photo client et vérifier dans S3 que `clients/client_4_....jpg` apparaît.
 
 ## 3. Commande de déploiement (obligatoire)
 
@@ -187,7 +253,7 @@ Si `USERS` = 0 lignes :
 
 Vérifiez aussi que les variables `DB_*` sur Cloud pointent vers la **même** base que celle où vous avez importé le SQL.
 
-## 12. Mot de passe admin (Cloud ou local)
+## 13. Mot de passe admin (Cloud ou local)
 
 ```bash
 php artisan authentiq:reset-password email@example.com "NouveauMotDePasse" --admin

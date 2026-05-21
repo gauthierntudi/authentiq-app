@@ -115,11 +115,44 @@ document.addEventListener('DOMContentLoaded', function() {
         return id && clientEditHasPhoto;
     }
 
-    function setClientPhotoPreviewFromUrl(url) {
+    function clientPhotoSrc(url, cacheBust) {
+        if (!url || url.startsWith('blob:')) {
+            return url || 'assets/images/user.jpg';
+        }
+        if (url.includes('?v=') || url.includes('&v=')) {
+            return url;
+        }
+        const sep = url.includes('?') ? '&' : '?';
+        const v = cacheBust ?? Date.now();
+
+        return `${url}${sep}v=${v}`;
+    }
+
+    function setClientPhotoPreviewFromUrl(url, cacheBust) {
         revokeClientPreviewUrl();
         if (clientPhotoPreview && url) {
-            clientPhotoPreview.src = url;
+            clientPhotoPreview.src = clientPhotoSrc(url, cacheBust);
         }
+    }
+
+    function refreshClientPhotoInGrid(clientId, photoUrl) {
+        if (!gridClients || !clientId || !photoUrl) {
+            return;
+        }
+        const wrapper = tableContainer?.querySelector('.gridjs-wrapper');
+        if (!wrapper) {
+            return;
+        }
+        const rows = wrapper.querySelectorAll('tbody tr');
+        rows.forEach((row) => {
+            const idCell = row.querySelector('td');
+            if (idCell && String(idCell.textContent).trim() === String(clientId)) {
+                const img = row.querySelector('td:nth-child(2) img');
+                if (img) {
+                    img.src = clientPhotoSrc(photoUrl);
+                }
+            }
+        });
     }
 
     function openClientCropperWithFile(fileOrBlob) {
@@ -433,8 +466,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             columns: [
                                 { name: "ID", width: "50px" },
                                 { name: "Photo", width: "70px", formatter: (cell) => {
-                                    const photoPath = cell || 'assets/images/user.jpg';
-                                    return gridjs.html(`<img src="${photoPath}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">`);
+                                    const photoPath = clientPhotoSrc(cell || 'assets/images/user.jpg');
+                                    const safe = photoPath.replace(/"/g, '&quot;');
+                                    return gridjs.html(`<img src="${safe}" alt="" style="width:40px; height:40px; border-radius:50%; object-fit:cover;" loading="lazy">`);
                                 }},
                                 { name: "Nom complet", width: "200px" },
                                 { name: "Téléphone", width: "120px" },
@@ -546,7 +580,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.status === 'success') {
                         iziToast.success({ title: 'Succès', message: data.message });
                         const isNewClient = document.getElementById('clientId').value === '';
-                        lastInsertedClientId = data.client_id;
+                        const savedClientId = data.client_id || clientIdVal;
+                        lastInsertedClientId = savedClientId;
+
+                        if (data.photo_url && savedClientId) {
+                            refreshClientPhotoInGrid(savedClientId, data.photo_url);
+                            const detailPhoto = document.getElementById('detailPhoto');
+                            if (detailPhoto) {
+                                detailPhoto.src = clientPhotoSrc(data.photo_url);
+                            }
+                        }
+
                         clientModal.hide();
 
                         if (otpModal && isNewClient) {
@@ -640,7 +684,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Photo
                     const photoEl = document.getElementById('detailPhoto');
-                    if(photoEl) photoEl.src = client.photo_url || client.photo || 'assets/images/user.jpg';
+                    if (photoEl) {
+                        photoEl.src = clientPhotoSrc(
+                            client.photo_url || client.photo || 'assets/images/user.jpg',
+                            client.updated_at ? new Date(client.updated_at).getTime() : Date.now(),
+                        );
+                    }
                     
                     // Informations principales
                     const nomEl = document.getElementById('detailNom');
@@ -785,7 +834,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             || (client.photo.startsWith('http') || client.photo.startsWith('/')
                                 ? client.photo
                                 : (client.photo.startsWith('uploads/') ? client.photo : `uploads/${client.photo.replace(/^\//, '')}`));
-                        setClientPhotoPreviewFromUrl(photoUrl);
+                        const bust = client.updated_at ? new Date(client.updated_at).getTime() : Date.now();
+                        setClientPhotoPreviewFromUrl(photoUrl, bust);
                     }
                 }
             })

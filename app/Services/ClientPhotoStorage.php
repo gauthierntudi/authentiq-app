@@ -42,18 +42,29 @@ class ClientPhotoStorage
 
     /**
      * URL affichable dans le navigateur (évite CORS S3 : proxy Laravel en production).
+     *
+     * @param  int|null  $cacheVersion  ex. updated_at timestamp — force le rechargement après modification
      */
-    public function photoUrl(?string $path, ?int $clientId = null): string
+    public function photoUrl(?string $path, ?int $clientId = null, ?int $cacheVersion = null): string
     {
         if (! $path) {
             return $this->defaultUrl();
         }
 
         if ($this->diskName() === 's3' && $clientId !== null && $clientId > 0) {
-            return url('/api/clients/'.$clientId.'/photo');
+            $v = $cacheVersion ?? time();
+
+            return url('/api/clients/'.$clientId.'/photo').'?v='.$v;
         }
 
-        return $this->url($path) ?? $this->defaultUrl();
+        $base = $this->url($path) ?? $this->defaultUrl();
+        if ($cacheVersion !== null && ! str_contains($base, 'user.jpg')) {
+            $sep = str_contains($base, '?') ? '&' : '?';
+
+            return $base.$sep.'v='.$cacheVersion;
+        }
+
+        return $base;
     }
 
     public function url(?string $path): ?string
