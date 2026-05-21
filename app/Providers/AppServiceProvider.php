@@ -27,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
                 'photo' => $user->photo,
                 'nom_complet' => $user->nom_complet,
                 'affectation' => $user->affectation,
+                'role' => $user->role,
             ] : session('user', []));
         });
     }

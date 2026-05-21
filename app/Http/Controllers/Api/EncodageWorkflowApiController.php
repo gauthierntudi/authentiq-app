@@ -64,8 +64,12 @@ class EncodageWorkflowApiController extends Controller
         return $query->first();
     }
 
-    private function assertEncodageEditable(Encodage $encodage): ?JsonResponse
+    private function assertEncodageEditable(Encodage $encodage, User $user): ?JsonResponse
     {
+        if ($user->role === 'admin') {
+            return null;
+        }
+
         if ($encodage->status !== 'incomplete') {
             return response()->json([
                 'status' => 'error',
@@ -115,7 +119,7 @@ class EncodageWorkflowApiController extends Controller
                         return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
                     }
 
-                    if ($blocked = $this->assertEncodageEditable($encodage)) {
+                    if ($blocked = $this->assertEncodageEditable($encodage, $user)) {
                         return $blocked;
                     }
 
@@ -279,7 +283,7 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
         }
 
-        if ($blocked = $this->assertEncodageEditable($encodage)) {
+        if ($blocked = $this->assertEncodageEditable($encodage, $user)) {
             return $blocked;
         }
 
@@ -412,7 +416,7 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
         }
 
-        if ($blocked = $this->assertEncodageEditable($encodage)) {
+        if ($blocked = $this->assertEncodageEditable($encodage, $user)) {
             return $blocked;
         }
 
@@ -511,7 +515,7 @@ class EncodageWorkflowApiController extends Controller
             ], 423);
         }
 
-        if ($blocked = $this->assertEncodageEditable($encodage)) {
+        if ($blocked = $this->assertEncodageEditable($encodage, $user)) {
             return $blocked;
         }
 
@@ -683,7 +687,7 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
         }
 
-        if ($blocked = $this->assertEncodageEditable($encodage)) {
+        if ($blocked = $this->assertEncodageEditable($encodage, $user)) {
             return $blocked;
         }
 

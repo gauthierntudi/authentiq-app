@@ -7,6 +7,7 @@
     }
 
 </style>
+<script>window.AUTHENTIQ_USER_ROLE = @json($user['role'] ?? '');</script>
 <!-- Sidenav Menu Start -->
 <div class="sidenav-menu" style="border-radius: 35px!important;">
 

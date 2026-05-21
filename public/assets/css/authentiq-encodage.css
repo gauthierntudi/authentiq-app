@@ -1734,12 +1734,83 @@
 
 .enc-pages-viewer__body {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
-    gap: 0.65rem;
+    gap: 1rem;
     padding: 1rem 0.75rem 1.25rem;
     min-height: min(70vh, 520px);
     background: rgba(0, 0, 0, 0.25);
+}
+
+.enc-pages-viewer__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+}
+
+.enc-pages-viewer__qr-panel {
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.65rem;
+    padding: 1rem 0.85rem;
+    border-radius: 16px;
+    background: rgba(26, 30, 42, 0.75);
+    border: 1px solid rgba(64, 70, 94, 0.55);
+}
+
+.enc-pages-viewer__qr-panel[hidden] {
+    display: none !important;
+}
+
+.enc-pages-viewer__qr-label {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8b93a8;
+}
+
+.enc-pages-viewer__qr-ref {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0eedee;
+    word-break: break-all;
+}
+
+.enc-pages-viewer__qr-wrap {
+    padding: 0.5rem;
+    border-radius: 12px;
+    background: #fff;
+    line-height: 0;
+}
+
+.enc-pages-viewer__qr-img {
+    width: 140px;
+    height: 140px;
+    display: block;
+    object-fit: contain;
+}
+
+.enc-pages-viewer__qr-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0eedee;
+    text-decoration: none;
+}
+
+.enc-pages-viewer__qr-link:hover {
+    color: #fff;
 }
 
 .enc-pages-viewer__stage {
@@ -1795,6 +1866,11 @@
         min-height: auto;
     }
 
+    .enc-pages-viewer__main {
+        flex-direction: column;
+        width: 100%;
+    }
+
     .enc-pages-viewer__nav {
         width: 100%;
         height: 40px;
@@ -1812,6 +1888,11 @@
 
     .enc-pages-viewer__nav--next {
         order: 3;
+    }
+
+    .enc-pages-viewer__qr-panel {
+        flex: none;
+        width: 100%;
     }
 }
 

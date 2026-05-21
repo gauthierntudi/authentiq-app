@@ -10,15 +10,28 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
             </div>
             <div class="modal-body enc-pages-viewer__body">
-                <button type="button" class="enc-pages-viewer__nav enc-pages-viewer__nav--prev" id="encPagesViewerPrev" aria-label="Page précédente">
-                    <iconify-icon icon="solar:alt-arrow-left-bold"></iconify-icon>
-                </button>
-                <div class="enc-pages-viewer__stage">
-                    <img src="" alt="" class="enc-pages-viewer__img" id="encPagesViewerImg">
+                <div class="enc-pages-viewer__main">
+                    <button type="button" class="enc-pages-viewer__nav enc-pages-viewer__nav--prev" id="encPagesViewerPrev" aria-label="Page précédente">
+                        <iconify-icon icon="solar:alt-arrow-left-bold"></iconify-icon>
+                    </button>
+                    <div class="enc-pages-viewer__stage">
+                        <img src="" alt="" class="enc-pages-viewer__img" id="encPagesViewerImg">
+                    </div>
+                    <button type="button" class="enc-pages-viewer__nav enc-pages-viewer__nav--next" id="encPagesViewerNext" aria-label="Page suivante">
+                        <iconify-icon icon="solar:alt-arrow-right-bold"></iconify-icon>
+                    </button>
                 </div>
-                <button type="button" class="enc-pages-viewer__nav enc-pages-viewer__nav--next" id="encPagesViewerNext" aria-label="Page suivante">
-                    <iconify-icon icon="solar:alt-arrow-right-bold"></iconify-icon>
-                </button>
+                <aside class="enc-pages-viewer__qr-panel" id="encPagesViewerQrPanel" hidden aria-label="QR code du document">
+                    <p class="enc-pages-viewer__qr-label">Vérification</p>
+                    <p class="enc-pages-viewer__qr-ref" id="encPagesViewerRef">—</p>
+                    <div class="enc-pages-viewer__qr-wrap">
+                        <img src="" alt="QR code de vérification" class="enc-pages-viewer__qr-img" id="encPagesViewerQrImg">
+                    </div>
+                    <a href="#" class="enc-pages-viewer__qr-link" id="encPagesViewerVerifyLink" target="_blank" rel="noopener noreferrer">
+                        <iconify-icon icon="solar:link-round-bold-duotone"></iconify-icon>
+                        Page de vérification
+                    </a>
+                </aside>
             </div>
         </div>
     </div>

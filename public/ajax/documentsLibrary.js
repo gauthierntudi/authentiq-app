@@ -20,8 +20,13 @@
     let lastData = null;
     let viewerPages = [];
     let viewerIndex = 0;
+    let viewerEncodageMeta = null;
 
     const viewerModal = document.getElementById('encPagesViewerModal');
+    const qrPanel = document.getElementById('encPagesViewerQrPanel');
+    const qrImg = document.getElementById('encPagesViewerQrImg');
+    const qrRef = document.getElementById('encPagesViewerRef');
+    const qrLink = document.getElementById('encPagesViewerVerifyLink');
     const viewerImg = document.getElementById('encPagesViewerImg');
     const viewerTitle = document.getElementById('encPagesViewerTitle');
     const viewerCounter = document.getElementById('encPagesViewerCounter');
@@ -101,12 +106,15 @@
         const sub = compact
             ? `${escapeHtml(item.client_nom || '')} · ${statusLabel(item.status)}`
             : `${escapeHtml(item.client_nom || '')} · ${statusLabel(item.status)} · ${item.pages_count} p.`;
+        const qrBadge = item.status === 'complete' && item.qr_url
+            ? `<span class="doc-lib-file__qr-badge" title="QR code disponible"><iconify-icon icon="solar:qr-code-bold-duotone"></iconify-icon></span>`
+            : '';
 
         return `
             <li class="doc-lib-file" data-encodage-id="${item.id_encodage}" role="button" tabindex="0">
                 ${thumb}
                 <div class="doc-lib-file__body">
-                    <div class="doc-lib-file__name">${escapeHtml(item.type_doc)} #${item.id_encodage}</div>
+                    <div class="doc-lib-file__name">${escapeHtml(item.type_doc)} #${item.id_encodage}${qrBadge}</div>
                     <div class="doc-lib-file__sub">${sub} · ${escapeHtml(item.updated_at || '')}</div>
                 </div>
                 <span class="doc-lib-file__size">${escapeHtml(item.size_label)}</span>
@@ -197,8 +205,40 @@
         }
     }
 
+    function updateViewerQr(meta) {
+        if (!qrPanel) {
+            return;
+        }
+
+        const show = meta?.status === 'complete' && meta?.qr_url;
+        qrPanel.hidden = !show;
+
+        if (!show) {
+            return;
+        }
+
+        if (qrImg) {
+            qrImg.src = meta.qr_url;
+        }
+        if (qrRef) {
+            qrRef.textContent = meta.numero || '—';
+        }
+        if (qrLink) {
+            if (meta.verify_url) {
+                qrLink.href = meta.verify_url;
+                qrLink.hidden = false;
+            } else {
+                qrLink.href = '#';
+                qrLink.hidden = true;
+            }
+        }
+    }
+
     async function openEncodage(id) {
         if (!id) return;
+
+        viewerEncodageMeta = (lastData?.encodages || []).find((e) => e.id_encodage === id) || null;
+
         try {
             const res = await fetch(`/api/encodage-workflow/${id}/pages`, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
             const json = await res.json();
@@ -209,6 +249,7 @@
             viewerPages = json.pages;
             viewerIndex = 0;
             showViewerPage();
+            updateViewerQr(viewerEncodageMeta);
             bootstrap.Modal.getOrCreateInstance(viewerModal).show();
         } catch (e) {
             iziToast?.error?.({ title: 'Erreur', message: e.message });

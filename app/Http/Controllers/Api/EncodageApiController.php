@@ -93,6 +93,13 @@ class EncodageApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Accès refusé'], 403);
         }
 
+        if ($user->role !== 'admin' && $encodage->status !== 'incomplete') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Encodage finalisé ou expiré : suppression impossible.',
+            ], 423);
+        }
+
         try {
             DB::transaction(function () use ($encodage) {
                 foreach ($encodage->pages as $page) {

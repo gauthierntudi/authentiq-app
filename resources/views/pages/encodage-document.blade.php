@@ -61,6 +61,7 @@
     <script>
         window.ENCODAGE_API_BASE = @json(url('/api/encodage-workflow'));
         window.ENCODAGE_DASHBOARD_URL = @json(url('/dashboard'));
+        window.AUTHENTIQ_USER_ROLE = @json($user->role ?? '');
         window.AUTHENTIQ_TEXTRACT_ENABLED = @json(config('authentiq.textract_enabled'));
         window.AUTHENTIQ_REKOGNITION_ENABLED = @json(config('authentiq.rekognition_enabled'));
         if (typeof iziToast !== 'undefined') {

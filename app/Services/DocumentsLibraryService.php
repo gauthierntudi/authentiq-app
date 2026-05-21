@@ -163,6 +163,7 @@ class DocumentsLibraryService
             'updated_at' => $e->updated_at?->format('d M, H:i'),
             'updated_iso' => $e->updated_at?->toIso8601String(),
             'verify_url' => $e->numero ? url('/verify/'.$e->numero) : null,
+            'qr_url' => $e->qr_path ? $this->storage->url($e->qr_path) : null,
             'folder_color' => $this->folderColor((int) $e->id_client),
         ];
     }

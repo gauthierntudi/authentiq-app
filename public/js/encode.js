@@ -135,7 +135,15 @@ function tryApplyPendingResume() {
     pendingResumePayload = null;
 }
 
+function isEncodageAdmin() {
+    return window.AUTHENTIQ_USER_ROLE === 'admin';
+}
+
 function isEncodageEditable() {
+    if (isEncodageAdmin()) {
+        return true;
+    }
+
     return encodageStatus === 'incomplete';
 }
 
@@ -146,15 +154,26 @@ function setEncodageStatus(status) {
 
 function syncWizardEditability() {
     const editable = isEncodageEditable();
+    const adminOnComplete = isEncodageAdmin() && encodageStatus === 'complete';
     const hint = document.getElementById('encodageEditHint');
 
     document.querySelectorAll('.encodage-wizard .stepper-header .step-item[data-step]').forEach((item) => {
-        item.classList.toggle('is-editable', editable);
-        item.disabled = !editable && parseInt(item.dataset.step, 10) < 5;
+        const stepNum = parseInt(item.dataset.step, 10);
+        const stepEditable = editable || (adminOnComplete && stepNum <= 5);
+        item.classList.toggle('is-editable', stepEditable);
+        item.disabled = !stepEditable && stepNum < 5;
     });
 
     if (hint) {
-        hint.hidden = !editable;
+        if (adminOnComplete) {
+            hint.hidden = false;
+            hint.textContent = 'Mode administrateur : vous pouvez modifier ou supprimer cet encodage finalisé.';
+        } else if (editable && encodageStatus === 'incomplete') {
+            hint.hidden = false;
+            hint.textContent = 'Tant que l\'encodage n\'est pas finalisé, vous pouvez revenir modifier les pages, le client ou le document via les étapes ci-dessus ou les boutons du récapitulatif.';
+        } else {
+            hint.hidden = true;
+        }
     }
 }
 
@@ -181,7 +200,7 @@ function getStepBlockedMessage(step) {
 }
 
 function canNavigateToStep(step) {
-    if (encodageStatus === 'complete') {
+    if (encodageStatus === 'complete' && !isEncodageAdmin()) {
         return step === 5;
     }
     if (step === 1) {
@@ -207,7 +226,9 @@ function bindStepperNavigation() {
 
             if (!isEncodageEditable() && step < 5) {
                 iziToast.info({
-                    message: 'Encodage finalisé : les modifications ne sont plus possibles.',
+                    message: isEncodageAdmin()
+                        ? 'Accès refusé à cette étape.'
+                        : 'Encodage finalisé : les modifications ne sont plus possibles.',
                 });
 
                 return;

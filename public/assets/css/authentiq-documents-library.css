@@ -190,6 +190,15 @@
     color: #8b93a8;
     margin-top: 0.15rem;
 }
+.doc-lib-file__qr-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.35rem;
+    color: #0eedee;
+    vertical-align: middle;
+    font-size: 1.05rem;
+}
+
 .doc-lib-file__size {
     font-size: 0.78rem;
     font-weight: 600;

@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let showUserColumn = false;
     let searchDebounceTimer = null;
     let encodageRowById = new Map();
+    const isAdmin = window.AUTHENTIQ_USER_ROLE === 'admin';
 
     function escapeHtml(str) {
         return String(str ?? '')
@@ -174,13 +175,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     formatter: (_, row) => {
                         const id = row.cells[0].data;
                         const status = row.cells[1].data;
-                        if (status === 'complete') {
+                        if (status !== 'incomplete' && !isAdmin) {
                             return gridjs.html('<span class="text-muted">—</span>');
                         }
+                        const editLabel = status === 'incomplete' ? 'Continuer' : 'Modifier';
+                        const editIcon = status === 'incomplete'
+                            ? 'solar:play-bold-duotone'
+                            : 'solar:pen-bold-duotone';
                         return gridjs.html(`
-                            <a href="/encodage-document" class="btn btn-secondary btn-icon me-1 border-radius" title="Continuer"
+                            <a href="/encodage-document" class="btn btn-secondary btn-icon me-1 border-radius" title="${editLabel}"
                                onclick="sessionStorage.setItem('continueEncodageId','${id}');">
-                                <iconify-icon icon="solar:play-bold-duotone" style="font-size:1.4em"></iconify-icon>
+                                <iconify-icon icon="${editIcon}" style="font-size:1.4em"></iconify-icon>
                             </a>
                             <button type="button" class="btn btn-danger btn-icon border-radius" onclick="deleteEncodage(${id})" title="Supprimer">
                                 <iconify-icon icon="solar:trash-bin-minimalistic-bold-duotone" style="font-size:1.4em"></iconify-icon>
