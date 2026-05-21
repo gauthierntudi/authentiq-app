@@ -123,15 +123,7 @@ class EncodageWorkflowApiController extends Controller
                         return $blocked;
                     }
 
-                    foreach ($encodage->pages as $page) {
-                        $this->storage->delete($page->file_path);
-                    }
-                    $encodage->pages()->delete();
-
-                    $encodage->update([
-                        'page_count' => $pageCount,
-                        'ocrTextFiles' => $ocrText,
-                    ]);
+                    $encodage->update(['ocrTextFiles' => $ocrText]);
                 } else {
                     $encodage = Encodage::query()->create([
                         'id_user' => $user->id_user,
@@ -140,51 +132,16 @@ class EncodageWorkflowApiController extends Controller
                         'id_province' => $user->id_province,
                         'id_ville' => $user->id_ville,
                         'affectation' => $user->affectation,
-                        'page_count' => $pageCount,
+                        'page_count' => 0,
                         'ocrTextFiles' => $ocrText,
                     ]);
                     $encodageId = $encodage->id_encodage;
                 }
 
-                $savedPages = [];
-                $filePaths = [];
+                [$savedPages, $filePaths] = $this->persistPagesFromRequest($request, $encodageId, $pageCount);
 
-                for ($i = 0; $i < $pageCount; $i++) {
-                    $file = $request->file("file_{$i}");
-                    if (! $file || ! $file->isValid()) {
-                        continue;
-                    }
-
-                    $stored = $this->storage->storeUploadedPage($file, $encodageId, $i + 1);
-                    $filePath = $stored['path'];
-                    $pageOcr = (string) $request->input("ocr_{$i}", '');
-
-                    $page = EncodagePage::query()->create([
-                        'id_encodage' => $encodageId,
-                        'page_number' => $i + 1,
-                        'file_path' => $filePath,
-                        'file_size' => $stored['size'],
-                        'ocr_text' => $pageOcr,
-                    ]);
-
-                    $savedPages[] = [
-                        'id_page' => $page->id_page,
-                        'page_number' => $page->page_number,
-                        'file_path' => $this->storage->urlForKnownPath($filePath),
-                        'ocr_text' => $pageOcr,
-                    ];
-                    $filePaths[] = $filePath;
-                }
-
-                if ($filePaths === []) {
-                    throw new \RuntimeException('Aucun fichier uploadé avec succès.');
-                }
-
-                if (count($savedPages) < $pageCount) {
-                    throw new \RuntimeException(
-                        count($savedPages).' page(s) reçue(s) sur '.$pageCount.' attendue(s). '
-                        .'Reprenez l\'étape scan/OCR (Suivant) pour enregistrer toutes les pages.'
-                    );
+                if ($savedPages === []) {
+                    throw new \RuntimeException('Aucune page enregistrée.');
                 }
 
                 Encodage::query()->where('id_encodage', $encodageId)->update([
@@ -722,7 +679,11 @@ class EncodageWorkflowApiController extends Controller
                 ->get();
 
             $count = $remaining->count();
-            Encodage::query()->where('id_encodage', $encodageId)->update(['page_count' => $count]);
+            $filesList = $remaining->pluck('file_path')->filter()->implode(',');
+            Encodage::query()->where('id_encodage', $encodageId)->update([
+                'page_count' => $count,
+                'files' => $filesList,
+            ]);
 
             $pagesPayload = $remaining->map(fn (EncodagePage $p) => [
                 'id_page' => $p->id_page,
@@ -740,6 +701,103 @@ class EncodageWorkflowApiController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Enregistre les pages sans tout supprimer : conserve les pages existantes (pageId_N) sans nouveau fichier.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: list<string>}
+     */
+    private function persistPagesFromRequest(Request $request, int $encodageId, int $pageCount): array
+    {
+        $savedPages = [];
+        $filePaths = [];
+        $keptPageIds = [];
+
+        for ($i = 0; $i < $pageCount; $i++) {
+            $pageOcr = (string) $request->input("ocr_{$i}", '');
+            $existingPageId = (int) $request->input("pageId_{$i}", 0);
+            $file = $request->file("file_{$i}");
+            $hasFile = $file && $file->isValid();
+
+            if ($existingPageId > 0 && ! $hasFile) {
+                $page = EncodagePage::query()
+                    ->where('id_page', $existingPageId)
+                    ->where('id_encodage', $encodageId)
+                    ->first();
+
+                if (! $page) {
+                    throw new \RuntimeException('Page '.$existingPageId.' introuvable pour cet encodage.');
+                }
+
+                $page->update([
+                    'page_number' => $i + 1,
+                    'ocr_text' => $pageOcr,
+                ]);
+
+                $keptPageIds[] = $page->id_page;
+                $filePaths[] = $page->file_path;
+                $savedPages[] = $this->pagePayload($page, $pageOcr);
+
+                continue;
+            }
+
+            if (! $hasFile) {
+                throw new \RuntimeException(
+                    'Page '.($i + 1).' : envoyez le fichier image ou l\'identifiant pageId_'.$i.' d\'une page déjà enregistrée.'
+                );
+            }
+
+            if ($existingPageId > 0) {
+                $old = EncodagePage::query()
+                    ->where('id_page', $existingPageId)
+                    ->where('id_encodage', $encodageId)
+                    ->first();
+
+                if ($old) {
+                    $this->storage->delete($old->file_path);
+                    $old->delete();
+                }
+            }
+
+            $stored = $this->storage->storeUploadedPage($file, $encodageId, $i + 1);
+            $filePath = $stored['path'];
+
+            $page = EncodagePage::query()->create([
+                'id_encodage' => $encodageId,
+                'page_number' => $i + 1,
+                'file_path' => $filePath,
+                'file_size' => $stored['size'],
+                'ocr_text' => $pageOcr,
+            ]);
+
+            $keptPageIds[] = $page->id_page;
+            $filePaths[] = $filePath;
+            $savedPages[] = $this->pagePayload($page, $pageOcr);
+        }
+
+        $orphans = EncodagePage::query()
+            ->where('id_encodage', $encodageId)
+            ->when($keptPageIds !== [], fn ($q) => $q->whereNotIn('id_page', $keptPageIds))
+            ->get();
+
+        foreach ($orphans as $orphan) {
+            $this->storage->delete($orphan->file_path);
+            $orphan->delete();
+        }
+
+        return [$savedPages, $filePaths];
+    }
+
+    /** @return array<string, mixed> */
+    private function pagePayload(EncodagePage $page, string $ocrText): array
+    {
+        return [
+            'id_page' => $page->id_page,
+            'page_number' => $page->page_number,
+            'file_path' => $this->storage->urlForKnownPath($page->file_path),
+            'ocr_text' => $ocrText !== '' ? $ocrText : $page->ocr_text,
+        ];
     }
 
     /**

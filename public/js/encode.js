@@ -1618,8 +1618,22 @@ async function blobFromPageImage(page) {
     }
 }
 
+function pageNeedsFileUpload(page) {
+    if (!page.id_page) {
+        return true;
+    }
+    if (page._isNewCapture) {
+        return true;
+    }
+
+    return page.blob instanceof Blob && page.blob.size > 0;
+}
+
 async function ensurePageBlobsForUpload() {
     for (const page of scannedPages) {
+        if (!pageNeedsFileUpload(page)) {
+            continue;
+        }
         if (page.blob instanceof Blob && page.blob.size > 0) {
             continue;
         }
@@ -1643,7 +1657,13 @@ async function saveImageAndOCR() {
         return;
     }
 
-    const missing = scannedPages.filter((p) => !(p.blob instanceof Blob) || p.blob.size === 0);
+    const missing = scannedPages.filter((p) => {
+        if (p.id_page && !p._isNewCapture && (!(p.blob instanceof Blob) || p.blob.size === 0)) {
+            return false;
+        }
+
+        return !(p.blob instanceof Blob) || p.blob.size === 0;
+    });
     if (missing.length > 0) {
         iziToast.error({
             message: `${missing.length} page(s) sans fichier image. Repassez par l\'étape scan (Suivant).`,
@@ -1656,7 +1676,12 @@ async function saveImageAndOCR() {
     const formData = new FormData();
 
     scannedPages.forEach((page, index) => {
-        formData.append(`file_${index}`, page.blob, `document_page_${index + 1}.jpg`);
+        if (page.id_page) {
+            formData.append(`pageId_${index}`, String(page.id_page));
+        }
+        if (page.blob instanceof Blob && page.blob.size > 0) {
+            formData.append(`file_${index}`, page.blob, `document_page_${index + 1}.jpg`);
+        }
         formData.append(`ocr_${index}`, page.ocrText || '');
     });
 
@@ -1677,22 +1702,7 @@ async function saveImageAndOCR() {
             setEncodageStatus('incomplete');
             clearScanPagesDirty();
             if (Array.isArray(data.pages)) {
-                data.pages.forEach((p, i) => {
-                    if (scannedPages[i]) {
-                        scannedPages[i].id_page = p.id_page ?? null;
-                        scannedPages[i].page_number = p.page_number ?? i + 1;
-                        scannedPages[i]._isNewCapture = false;
-                        scannedPages[i].blob = null;
-                        if (p.file_path) {
-                            scannedPages[i].image = p.file_path;
-                        }
-                        if (p.ocr_text) {
-                            scannedPages[i].ocrText = p.ocr_text;
-                        }
-                    }
-                });
-                syncOcrTextFromPages();
-                updateScanPagesUI();
+                applyServerPagesToScanned(data.pages);
             }
             iziToast.success({ message: data.message || `${scannedPages.length} page(s) sauvegardée(s).` });
             if (data.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
@@ -3125,17 +3135,7 @@ function setRecapScannedPages(pages) {
         .sort((a, b) => (a.page_number ?? 0) - (b.page_number ?? 0));
 
     if (pages?.length) {
-        const byId = new Map(scannedPages.filter((p) => p.id_page).map((p) => [p.id_page, p]));
-        pages.forEach((p) => {
-            if (p.id_page && byId.has(p.id_page)) {
-                const local = byId.get(p.id_page);
-                local.page_number = p.page_number;
-                if (p.file_path) {
-                    local.image = p.file_path;
-                }
-                local.ocrText = p.ocr_text ?? local.ocrText;
-            }
-        });
+        applyServerPagesToScanned(pages);
     }
 }
 
