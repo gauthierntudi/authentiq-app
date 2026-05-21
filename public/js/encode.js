@@ -32,8 +32,12 @@ let canvasScale = 1;
 let scannedPages = [];
 let currentPageIndex = 0;
 
-// OpenCV
+// OpenCV / OCR — chargés à la demande (évite ~10 Mo au premier affichage)
+const OPENCV_JS_URL = 'https://docs.opencv.org/4.5.0/opencv.js';
+const TESSERACT_JS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 let opencvReady = false;
+let opencvLoadPromise = null;
+let tesseractLoadPromise = null;
 
 // Durée du document sélectionné (pour calcul date expiration)
 let currentDocDuree = 0;
@@ -297,11 +301,71 @@ function applyResumedEncodage(data) {
     iziToast.info({ message: 'Encodage repris. Vous pouvez continuer où vous vous êtes arrêté.', position: 'topRight' });
 }
 
-// Callback OpenCV
-function onOpenCvReady() {
-    opencvReady = true;
-    console.log('OpenCV.js chargé');
-    iziToast.success({ title: 'OpenCV.js', message: 'Détection avancée activée', position: 'bottomRight' });
+function loadOpenCvOnce() {
+    if (opencvReady && typeof cv !== 'undefined') {
+        return Promise.resolve();
+    }
+    if (opencvLoadPromise) {
+        return opencvLoadPromise;
+    }
+
+    opencvLoadPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-enc-opencv]');
+        if (existing) {
+            const poll = setInterval(() => {
+                if (typeof cv !== 'undefined') {
+                    clearInterval(poll);
+                    opencvReady = true;
+                    resolve();
+                }
+            }, 80);
+            setTimeout(() => {
+                clearInterval(poll);
+                reject(new Error('OpenCV timeout'));
+            }, 120000);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = OPENCV_JS_URL;
+        script.async = true;
+        script.dataset.encOpencv = '1';
+        script.onload = () => {
+            opencvReady = typeof cv !== 'undefined';
+            resolve();
+        };
+        script.onerror = () => reject(new Error('Échec chargement OpenCV'));
+        document.head.appendChild(script);
+    });
+
+    return opencvLoadPromise.catch((err) => {
+        opencvLoadPromise = null;
+        throw err;
+    });
+}
+
+function loadTesseractOnce() {
+    if (typeof Tesseract !== 'undefined') {
+        return Promise.resolve();
+    }
+    if (tesseractLoadPromise) {
+        return tesseractLoadPromise;
+    }
+
+    tesseractLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = TESSERACT_JS_URL;
+        script.async = true;
+        script.dataset.encTesseract = '1';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Échec chargement Tesseract'));
+        document.head.appendChild(script);
+    });
+
+    return tesseractLoadPromise.catch((err) => {
+        tesseractLoadPromise = null;
+        throw err;
+    });
 }
 
 function attachScanStream(stream) {
@@ -458,7 +522,7 @@ function bindWizardNavigation() {
 }
 
 // Capturer l'image avec détection
-function captureImageWithDetection() {
+async function captureImageWithDetection() {
     const video = getActiveScanVideo();
     const canvas = document.getElementById('canvas');
     if (!video || !canvas || !video.videoWidth) {
@@ -476,16 +540,20 @@ function captureImageWithDetection() {
 
     closeScanCameraModal();
 
-    iziToast.info({ message: 'Détection en cours...', timeout: 1000 });
+    iziToast.info({ message: 'Détection en cours...', timeout: 2000 });
 
-    setTimeout(() => {
-        if (opencvReady) {
-            detectWithOpenCV(canvas);
-        } else {
-            detectDocumentCorners(canvas);
-        }
-        showCropInterface();
-    }, 50);
+    try {
+        await loadOpenCvOnce();
+    } catch (_) {
+        /* repli détection simple */
+    }
+
+    if (opencvReady && typeof cv !== 'undefined') {
+        detectWithOpenCV(canvas);
+    } else {
+        detectDocumentCorners(canvas);
+    }
+    showCropInterface();
 }
 
 // Détection avec OpenCV (plus précise)
@@ -1450,8 +1518,17 @@ function pageNeedsOcr(page) {
     return !page.ocrText || !String(page.ocrText).trim();
 }
 
-function processAllPagesOCR() {
+async function processAllPagesOCR() {
     showEncPagesLoader('step2');
+
+    try {
+        await loadTesseractOnce();
+    } catch (err) {
+        console.error('Tesseract:', err);
+        hideEncPagesLoader('step2');
+        iziToast.error({ message: 'Impossible de charger le moteur OCR. Vérifiez votre connexion.' });
+        return;
+    }
 
     const ocrProgress = document.getElementById('ocrProgress');
     const ocrProgressText = document.getElementById('ocrProgressText');

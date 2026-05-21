@@ -27,7 +27,6 @@
         }
     </style>
 
-    <script async src="https://docs.opencv.org/4.5.0/opencv.js" onload="onOpenCvReady()"></script>
 </head>
 
 <body>
@@ -56,7 +55,6 @@
     <script src="assets/js/app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script>
         window.ENCODAGE_API_BASE = @json(url('/api/encodage-workflow'));

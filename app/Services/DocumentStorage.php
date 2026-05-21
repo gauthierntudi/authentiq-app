@@ -172,6 +172,36 @@ class DocumentStorage
         return $normalized;
     }
 
+    /**
+     * URL pour un fichier déjà référencé en base (évite HeadObject S3 par fichier).
+     */
+    public function urlForKnownPath(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        $normalized = $this->normalizePath($path);
+
+        if (str_starts_with($normalized, 'uploads/')) {
+            return asset($normalized);
+        }
+
+        if ($this->diskName() === 'uploads') {
+            return rtrim(config('app.url'), '/').'/uploads/'.$normalized;
+        }
+
+        if ($this->diskName() === 's3' && $this->cloudDiskReady()) {
+            $signed = $this->temporaryUrlOrNull($normalized);
+
+            if ($signed !== null) {
+                return $signed;
+            }
+        }
+
+        return $this->legacyPublicUrl($normalized);
+    }
+
     public function url(?string $path): ?string
     {
         if (! $path) {

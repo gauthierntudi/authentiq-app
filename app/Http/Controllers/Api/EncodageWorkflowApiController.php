@@ -170,7 +170,7 @@ class EncodageWorkflowApiController extends Controller
                     $savedPages[] = [
                         'id_page' => $page->id_page,
                         'page_number' => $page->page_number,
-                        'file_path' => $this->storage->url($filePath),
+                        'file_path' => $this->storage->urlForKnownPath($filePath),
                         'ocr_text' => $pageOcr,
                     ];
                     $filePaths[] = $filePath;
@@ -460,7 +460,7 @@ class EncodageWorkflowApiController extends Controller
         $pages = $encodage->pages->map(fn (EncodagePage $p) => [
             'id_page' => $p->id_page,
             'page_number' => $p->page_number,
-            'file_path' => $this->storage->url($p->file_path),
+            'file_path' => $this->storage->urlForKnownPath($p->file_path),
             'file_size' => $p->file_size,
             'ocr_text' => $p->ocr_text,
         ])->values();
@@ -470,7 +470,7 @@ class EncodageWorkflowApiController extends Controller
             $qr = [
                 'numero' => $encodage->numero,
                 'verify_url' => url('/verify/'.$encodage->numero),
-                'qr_url' => $this->storage->url($encodage->qr_path),
+                'qr_url' => $this->storage->urlForKnownPath($encodage->qr_path),
             ];
         }
 
@@ -617,7 +617,7 @@ class EncodageWorkflowApiController extends Controller
             ->map(fn (EncodagePage $p) => [
                 'id_page' => $p->id_page,
                 'page_number' => $p->page_number,
-                'file_path' => $this->storage->url($p->file_path),
+                'file_path' => $this->storage->urlForKnownPath($p->file_path),
                 'file_size' => $p->file_size,
                 'ocr_text' => $p->ocr_text,
                 'quality_score' => $p->quality_score,
@@ -639,16 +639,19 @@ class EncodageWorkflowApiController extends Controller
             return $user;
         }
 
-        $encodage = Encodage::query()
-            ->with(['pages', 'client', 'doc'])
-            ->where('id_encodage', $id)
-            ->where('status', 'incomplete');
+        $encodageQuery = Encodage::query()
+            ->with([
+                'pages' => fn ($q) => $q->select('id_page', 'id_encodage', 'page_number', 'file_path', 'ocr_text'),
+                'client:id_client,nom_complet',
+                'doc:id_doc,nom_doc,type_doc',
+            ])
+            ->where('id_encodage', $id);
 
         if ($user->role !== 'admin') {
-            $encodage->where('id_user', $user->id_user);
+            $encodageQuery->where('id_user', $user->id_user)->where('status', 'incomplete');
         }
 
-        $encodage = $encodage->first();
+        $encodage = $encodageQuery->first();
 
         if (! $encodage) {
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
@@ -657,13 +660,22 @@ class EncodageWorkflowApiController extends Controller
         $pages = $encodage->pages->map(fn (EncodagePage $p) => [
             'id_page' => $p->id_page,
             'page_number' => $p->page_number,
-            'file_path' => $this->storage->url($p->file_path),
+            'file_path' => $this->storage->urlForKnownPath($p->file_path),
             'ocr_text' => $p->ocr_text,
         ])->values();
 
         return response()->json([
             'status' => 'success',
-            'encodage' => $encodage,
+            'encodage' => [
+                'id_encodage' => $encodage->id_encodage,
+                'id_client' => $encodage->id_client,
+                'id_doc' => $encodage->id_doc,
+                'status' => $encodage->status,
+                'montant' => $encodage->montant,
+                'date_emission' => $encodage->date_emission,
+                'date_expiration' => $encodage->date_expiration,
+                'page_count' => $encodage->page_count,
+            ],
             'pages' => $pages,
         ]);
     }
@@ -715,7 +727,7 @@ class EncodageWorkflowApiController extends Controller
             $pagesPayload = $remaining->map(fn (EncodagePage $p) => [
                 'id_page' => $p->id_page,
                 'page_number' => $p->page_number,
-                'file_path' => $this->storage->url($p->file_path),
+                'file_path' => $this->storage->urlForKnownPath($p->file_path),
                 'ocr_text' => $p->ocr_text,
             ])->values();
 

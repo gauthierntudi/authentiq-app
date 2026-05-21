@@ -27,9 +27,19 @@ class EncodageApiController extends Controller
         }
 
         $query = Encodage::query()
-            ->with(['client', 'doc', 'user', 'commune'])
+            ->select([
+                'id_encodage', 'id_client', 'id_doc', 'id_user', 'id_commune', 'type_doc',
+                'status', 'page_count', 'affectation', 'created_at', 'updated_at',
+            ])
+            ->with([
+                'client:id_client,nom_complet,photo,updated_at',
+                'doc:id_doc,nom_doc,type_doc',
+                'user:id_user,nom_complet',
+                'commune:id_commune,nom',
+            ])
             ->orderByDesc('updated_at')
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->limit(250);
 
         if ($user->role !== 'admin') {
             $query->where('id_user', $user->id_user);

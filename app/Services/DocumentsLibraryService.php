@@ -26,8 +26,19 @@ class DocumentsLibraryService
     public function browse(User $user, ?string $search = null, ?string $status = null, ?int $clientId = null): array
     {
         $query = $this->encodageQuery($user)
-            ->with(['client', 'doc', 'pages'])
-            ->orderByDesc('updated_at');
+            ->select([
+                'id_encodage', 'id_client', 'id_doc', 'id_user', 'type_doc', 'status',
+                'numero', 'qr_path', 'page_count', 'affectation', 'created_at', 'updated_at',
+            ])
+            ->with([
+                'client:id_client,nom_complet,photo,updated_at',
+                'doc:id_doc,nom_doc,type_doc',
+                'pages' => fn ($q) => $q
+                    ->select('id_page', 'id_encodage', 'page_number', 'file_path', 'file_size')
+                    ->orderBy('page_number'),
+            ])
+            ->orderByDesc('updated_at')
+            ->limit(300);
 
         if ($clientId !== null && $clientId > 0) {
             $query->where('id_client', $clientId);
@@ -158,12 +169,12 @@ class DocumentsLibraryService
             'size_bytes' => $sizeBytes,
             'size_label' => $this->formatBytes($sizeBytes),
             'preview_url' => $firstPage?->file_path
-                ? $this->storage->url($firstPage->file_path)
+                ? $this->storage->urlForKnownPath($firstPage->file_path)
                 : null,
             'updated_at' => $e->updated_at?->format('d M, H:i'),
             'updated_iso' => $e->updated_at?->toIso8601String(),
             'verify_url' => $e->numero ? url('/verify/'.$e->numero) : null,
-            'qr_url' => $e->qr_path ? $this->storage->url($e->qr_path) : null,
+            'qr_url' => $e->qr_path ? $this->storage->urlForKnownPath($e->qr_path) : null,
             'folder_color' => $this->folderColor((int) $e->id_client),
         ];
     }
