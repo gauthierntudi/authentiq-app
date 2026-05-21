@@ -182,6 +182,7 @@ class ClientApiController extends Controller
                 ];
 
                 $photoFile = $request->hasFile('photo') ? $request->file('photo') : null;
+                $photoBytes = $photoFile ? $this->clientPhotos->bytesFromUpload($photoFile) : null;
                 if ($photoFile) {
                     $updateData['photo'] = $this->clientPhotos->store($client, $photoFile);
                 }
@@ -189,10 +190,7 @@ class ClientApiController extends Controller
                 $client->update($updateData);
 
                 if ($photoFile) {
-                    $this->indexClientFaceNow(
-                        $client->fresh(),
-                        $this->clientPhotos->bytesFromUpload($photoFile),
-                    );
+                    $this->indexClientFaceNow($client->fresh(), $photoBytes);
                 }
 
                 return response()->json([

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Aws\S3ObjectHelper;
 use App\Services\DocumentStorage;
 use Illuminate\Console\Command;
 
@@ -34,6 +35,25 @@ class AuthentiqStorageStatusCommand extends Command
             }
 
             $this->info('S3 : configuration OK.');
+
+            $s3 = S3ObjectHelper::fromDiskConfig();
+            if ($s3) {
+                $testKey = '_authentiq_healthcheck/'.uniqid().'.txt';
+                try {
+                    $s3->put($testKey, 'ok', 'text/plain');
+                    $read = $s3->get($testKey);
+                    if ($read === 'ok') {
+                        $this->info("Test lecture/écriture S3 : OK ({$testKey})");
+                    } else {
+                        $this->error('Test S3 : écriture OK mais lecture échouée.');
+                    }
+                } catch (\Throwable $e) {
+                    $this->error('Test S3 échoué : '.$e->getMessage());
+                    $this->comment('Vérifiez IAM (s3:PutObject, s3:GetObject) et AWS_ENDPOINT si bucket R2.');
+
+                    return self::FAILURE;
+                }
+            }
         } else {
             $this->info('Mode local (public/uploads).');
         }

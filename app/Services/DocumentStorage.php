@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Aws\S3ObjectHelper;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -68,22 +69,56 @@ class DocumentStorage
             return null;
         }
 
+        $key = ltrim($path, '/');
+
+        if ($this->diskName() === 's3') {
+            $s3 = S3ObjectHelper::fromDiskConfig();
+            if ($s3) {
+                $bytes = $s3->get($key);
+                if ($bytes !== null) {
+                    return $bytes;
+                }
+            }
+        }
+
         try {
-            $contents = $this->disk()->get($path);
+            $contents = $this->disk()->get($key);
             if ($contents !== false && $contents !== '') {
                 return $contents;
             }
         } catch (\Throwable) {
         }
 
-        if ($this->diskExists($path)) {
+        return null;
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    public function diskPut(string $path, string $bytes, string $contentType = 'application/octet-stream'): void
+    {
+        $this->assertCloudDiskReady();
+
+        $key = ltrim($path, '/');
+
+        if ($this->diskName() === 's3') {
+            $s3 = S3ObjectHelper::fromDiskConfig();
+            if (! $s3) {
+                throw new \RuntimeException('Configuration S3 incomplète.');
+            }
+
             try {
-                return $this->disk()->get($path);
-            } catch (\Throwable) {
+                $s3->put($key, $bytes, $contentType);
+
+                return;
+            } catch (\Throwable $e) {
+                throw new \RuntimeException('Upload S3 échoué : '.$e->getMessage(), 0, $e);
             }
         }
 
-        return null;
+        if (! $this->disk()->put($key, $bytes)) {
+            throw new \RuntimeException('Écriture sur le disque uploads impossible.');
+        }
     }
 
     public function prefix(): string
@@ -101,7 +136,16 @@ class DocumentStorage
         $fileName = sprintf('doc_%d_p%d_%s.jpg', $encodageId, $pageNumber, uniqid());
         $relativePath = $this->prefix().'/'.$fileName;
 
-        $this->disk()->putFileAs($this->prefix(), $file, $fileName, ['visibility' => 'public']);
+        $bytes = $file->get();
+        if ($bytes === '') {
+            $path = $file->getRealPath();
+            $bytes = ($path && is_readable($path)) ? (file_get_contents($path) ?: '') : '';
+        }
+        if ($bytes === '') {
+            throw new \RuntimeException('Impossible de lire l\'image de la page.');
+        }
+
+        $this->diskPut($relativePath, $bytes, 'image/jpeg');
 
         $size = $file->getSize();
         if ($size === false || $size === null) {
@@ -123,7 +167,7 @@ class DocumentStorage
         $this->assertCloudDiskReady();
 
         $normalized = $this->normalizePath($relativePath);
-        $this->disk()->put($normalized, $contents, ['visibility' => 'public']);
+        $this->diskPut($normalized, $contents, 'image/jpeg');
 
         return $normalized;
     }

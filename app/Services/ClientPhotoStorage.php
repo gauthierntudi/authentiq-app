@@ -22,11 +22,15 @@ class ClientPhotoStorage
 
     public function store(Client $client, UploadedFile $file): string
     {
-        $this->documents->assertCloudDiskReady();
+        $bytes = $this->bytesFromUpload($file);
+        if ($bytes === null || $bytes === '') {
+            throw new \RuntimeException('Impossible de lire la photo envoyée.');
+        }
 
         $name = 'client_'.$client->id_client.'_'.uniqid().'.jpg';
-        $this->disk()->putFileAs('clients', $file, $name, ['visibility' => 'public']);
         $relativePath = 'clients/'.$name;
+
+        $this->documents->diskPut($relativePath, $bytes, 'image/jpeg');
 
         return $this->diskName() === 'uploads' ? 'uploads/'.$relativePath : $relativePath;
     }
@@ -138,7 +142,7 @@ class ClientPhotoStorage
 
         $name = 'client_'.$client->id_client.'_'.uniqid().'.jpg';
         $newDiskPath = 'clients/'.$name;
-        $this->disk()->put($newDiskPath, $bytes, ['visibility' => 'public']);
+        $this->documents->diskPut($newDiskPath, $bytes, 'image/jpeg');
 
         $stored = $this->diskName() === 'uploads'
             ? 'uploads/'.$newDiskPath
@@ -151,14 +155,22 @@ class ClientPhotoStorage
 
     public function bytesFromUpload(UploadedFile $file): ?string
     {
-        $path = $file->getRealPath();
-        if (! $path || ! is_readable($path)) {
-            return null;
+        try {
+            $contents = $file->get();
+            if ($contents !== '') {
+                return $contents;
+            }
+        } catch (\Throwable) {
         }
 
-        $bytes = file_get_contents($path);
+        $path = $file->getRealPath();
+        if ($path && is_readable($path)) {
+            $bytes = file_get_contents($path);
 
-        return ($bytes !== false && $bytes !== '') ? $bytes : null;
+            return ($bytes !== false && $bytes !== '') ? $bytes : null;
+        }
+
+        return null;
     }
 
     public function normalizePath(string $path): string
