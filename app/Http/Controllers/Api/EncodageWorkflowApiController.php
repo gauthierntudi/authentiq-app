@@ -445,6 +445,7 @@ class EncodageWorkflowApiController extends Controller
         }
 
         $pages = $encodage->pages->map(fn (EncodagePage $p) => [
+            'id_page' => $p->id_page,
             'page_number' => $p->page_number,
             'file_path' => $this->storage->url($p->file_path),
             'file_size' => $p->file_size,
@@ -651,10 +652,27 @@ class EncodageWorkflowApiController extends Controller
             $this->storage->delete($page->file_path);
             $page->delete();
 
-            $count = EncodagePage::query()->where('id_encodage', $encodageId)->count();
+            $remaining = EncodagePage::query()
+                ->where('id_encodage', $encodageId)
+                ->orderBy('page_number')
+                ->get();
+
+            $count = $remaining->count();
             Encodage::query()->where('id_encodage', $encodageId)->update(['page_count' => $count]);
 
-            return response()->json(['status' => 'success', 'message' => 'Page supprimée.']);
+            $pagesPayload = $remaining->map(fn (EncodagePage $p) => [
+                'id_page' => $p->id_page,
+                'page_number' => $p->page_number,
+                'file_path' => $this->storage->url($p->file_path),
+                'ocr_text' => $p->ocr_text,
+            ])->values();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Page supprimée.',
+                'page_count' => $count,
+                'pages' => $pagesPayload,
+            ]);
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }

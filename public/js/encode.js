@@ -178,7 +178,9 @@ function applyResumedEncodage(data) {
     if (clientId) document.getElementById('clientId').value = clientId;
 
     if (pages.length > 0) {
-        scannedPages = pages.map((p, i) => ({
+        scannedPages = pages.map((p) => ({
+            id_page: p.id_page ?? null,
+            page_number: p.page_number ?? null,
             image: p.file_path,
             blob: null,
             ocrText: p.ocr_text || '',
@@ -332,6 +334,7 @@ function setupEventListeners() {
 
     bindWizardNavigation();
     bindStepperNavigation();
+    bindScanPageRemoveHandlers();
     syncWizardEditability();
     setupEncodageOtp();
 }
@@ -669,32 +672,248 @@ function hasPendingCapture() {
     );
 }
 
+function renderScanPagesListHtml() {
+    if (scannedPages.length === 0) {
+        return '';
+    }
+
+    const canDelete = isEncodageEditable();
+
+    return scannedPages
+        .map((page, i) => {
+            const label = page.page_number ? `Page ${page.page_number}` : `Page ${i + 1}`;
+            const deleteBtn = canDelete
+                ? `<button type="button" class="btn btn-sm btn-outline-danger scan-pages-summary__remove" data-remove-page-index="${i}" title="Supprimer ${label}" aria-label="Supprimer ${label}">
+                    <iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon>
+                   </button>`
+                : '';
+
+            return `<li class="scan-pages-summary__item">
+                <span class="scan-pages-summary__label"><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> ${label}</span>
+                ${deleteBtn}
+            </li>`;
+        })
+        .join('');
+}
+
+function getScanPagesCountLabel(n) {
+    if (n === 0) {
+        return 'Aucune page enregistrée';
+    }
+    if (n === 1) {
+        return '1 page — document à une page (vous pouvez continuer ou en ajouter une autre)';
+    }
+
+    return `${n} pages enregistrées — document multipages`;
+}
+
+function syncOcrTextFromPages() {
+    const ocrArea = document.getElementById('ocrText');
+    if (!ocrArea) {
+        return;
+    }
+
+    ocrArea.value = scannedPages
+        .map((p, i) => `--- Page ${i + 1} ---\n${p.ocrText || ''}`)
+        .join('\n\n');
+}
+
+function applyServerPagesToScanned(pages) {
+    if (!Array.isArray(pages) || pages.length === 0) {
+        scannedPages = [];
+        syncOcrTextFromPages();
+        updateScanPagesUI();
+
+        return;
+    }
+
+    scannedPages = pages.map((p) => ({
+        id_page: p.id_page ?? null,
+        page_number: p.page_number ?? null,
+        image: p.file_path || '',
+        blob: null,
+        ocrText: p.ocr_text || '',
+    }));
+    syncOcrTextFromPages();
+    updateScanPagesUI();
+}
+
+function bindScanPageRemoveHandlers() {
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-page-index]');
+        if (!btn) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const index = parseInt(btn.getAttribute('data-remove-page-index'), 10);
+        if (!Number.isNaN(index)) {
+            removeScannedPage(index);
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-recap-page]');
+        if (!btn) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const idPage = parseInt(btn.getAttribute('data-remove-recap-page'), 10);
+        if (Number.isNaN(idPage)) {
+            return;
+        }
+        const index = scannedPages.findIndex((p) => p.id_page === idPage);
+        if (index >= 0) {
+            removeScannedPage(index);
+        } else {
+            removeScannedPageById(idPage);
+        }
+    });
+}
+
+async function removeScannedPage(index) {
+    if (!isEncodageEditable()) {
+        iziToast.info({ message: 'Encodage finalisé : suppression impossible.' });
+
+        return;
+    }
+
+    const page = scannedPages[index];
+    if (!page) {
+        return;
+    }
+
+    if (scannedPages.length <= 1) {
+        iziToast.warning({
+            message: 'Impossible de supprimer la dernière page. L\'encodage doit contenir au moins une page scannée.',
+        });
+
+        return;
+    }
+
+    const label = page.page_number ? `page ${page.page_number}` : `page ${index + 1}`;
+    if (!window.confirm(`Supprimer la ${label} ? Cette action est définitive.`)) {
+        return;
+    }
+
+    if (encodageId && page.id_page) {
+        const ok = await removeScannedPageOnServer(page.id_page);
+        if (!ok) {
+            return;
+        }
+    } else {
+        scannedPages.splice(index, 1);
+        syncOcrTextFromPages();
+        updateScanPagesUI();
+        iziToast.success({ message: 'Page retirée.' });
+    }
+
+    if (currentStep === 5 && encodageId) {
+        loadRecapitulatif();
+    }
+}
+
+async function removeScannedPageById(idPage) {
+    if (!encodageId || !idPage) {
+        return;
+    }
+
+    if (scannedPages.length <= 1 && scannedPages.some((p) => p.id_page === idPage)) {
+        iziToast.warning({ message: 'Impossible de supprimer la dernière page.' });
+
+        return;
+    }
+
+    if (!window.confirm('Supprimer cette page scannée ?')) {
+        return;
+    }
+
+    await removeScannedPageOnServer(idPage);
+    if (currentStep === 5 && encodageId) {
+        loadRecapitulatif();
+    }
+}
+
+async function removeScannedPageOnServer(idPage) {
+    const formData = new FormData();
+    formData.append('encodageId', encodageId);
+    formData.append('pageId', idPage);
+
+    try {
+        const response = await fetch(`${ENCODAGE_API}/delete-page`, {
+            method: 'POST',
+            headers: encodeApiHeaders(),
+            body: formData,
+        });
+        const data = await response.json();
+
+        if (response.status === 423 || data.status !== 'success') {
+            iziToast.error({ message: data.message || 'Suppression impossible.' });
+            if (response.status === 423) {
+                setEncodageStatus('complete');
+            }
+
+            return false;
+        }
+
+        if (data.pages) {
+            applyServerPagesToScanned(data.pages);
+        } else {
+            const idx = scannedPages.findIndex((p) => p.id_page === idPage);
+            if (idx >= 0) {
+                scannedPages.splice(idx, 1);
+            }
+            syncOcrTextFromPages();
+            updateScanPagesUI();
+        }
+
+        iziToast.success({ message: data.message || 'Page supprimée.' });
+
+        return true;
+    } catch (err) {
+        console.error('delete-page:', err);
+        iziToast.error({ message: 'Erreur lors de la suppression de la page.' });
+
+        return false;
+    }
+}
+
 function updateScanPagesUI() {
     const countEl = document.getElementById('scanPagesCount');
     const listEl = document.getElementById('scanPagesList');
+    const ocrCountEl = document.getElementById('ocrPagesCount');
+    const ocrListEl = document.getElementById('scanPagesListOcr');
+    const ocrToolbar = document.getElementById('ocrPagesToolbar');
     const summaryEl = document.getElementById('scanPagesSummary');
     const addBtn = document.getElementById('addPage');
     const validateBtn = document.getElementById('validatePage');
     const n = scannedPages.length;
+    const countLabel = getScanPagesCountLabel(n);
+    const listHtml = renderScanPagesListHtml();
 
     if (countEl) {
-        if (n === 0) {
-            countEl.textContent = 'Aucune page enregistrée';
-        } else if (n === 1) {
-            countEl.textContent = '1 page — document à une page (vous pouvez continuer ou en ajouter une autre)';
-        } else {
-            countEl.textContent = `${n} pages enregistrées — document multipages`;
-        }
+        countEl.textContent = countLabel;
+    }
+
+    if (ocrCountEl) {
+        ocrCountEl.textContent = countLabel;
     }
 
     if (summaryEl) {
         summaryEl.classList.toggle('is-single', n === 1);
     }
 
+    if (ocrToolbar) {
+        ocrToolbar.hidden = n === 0;
+    }
+
     if (listEl) {
-        listEl.innerHTML = scannedPages
-            .map((_, i) => `<li><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Page ${i + 1}</li>`)
-            .join('');
+        listEl.innerHTML = listHtml;
+    }
+
+    if (ocrListEl) {
+        ocrListEl.innerHTML = listHtml;
     }
 
     if (addBtn) {
@@ -723,6 +942,8 @@ function commitCurrentCaptureToScan(silent = false) {
             }
 
             scannedPages.push({
+                id_page: null,
+                page_number: null,
                 blob,
                 image: canvas.toDataURL('image/jpeg', 0.95),
                 ocrText: '',
@@ -1171,6 +1392,22 @@ function saveImageAndOCR() {
             encodageId = data.encodageId;
             document.getElementById('encodageId').value = encodageId;
             setEncodageStatus('incomplete');
+            if (Array.isArray(data.pages)) {
+                data.pages.forEach((p, i) => {
+                    if (scannedPages[i]) {
+                        scannedPages[i].id_page = p.id_page ?? null;
+                        scannedPages[i].page_number = p.page_number ?? i + 1;
+                        if (p.file_path) {
+                            scannedPages[i].image = p.file_path;
+                        }
+                        if (p.ocr_text) {
+                            scannedPages[i].ocrText = p.ocr_text;
+                        }
+                    }
+                });
+                syncOcrTextFromPages();
+                updateScanPagesUI();
+            }
             iziToast.success({ message: `${scannedPages.length} page(s) sauvegardée(s).` });
             if (data.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
                 pollTextractOcr(encodageId);
@@ -2432,14 +2669,28 @@ function renderRecapitulatifHtml(data) {
         : `<button type="button" class="btn btn-sm btn-light fw-semibold enc-recap-profile__btn" style="border-radius:12px" disabled><iconify-icon icon="solar:letter-bold"></iconify-icon><span>Email</span></button>`;
 
     const sortedPages = pages.slice().sort((a, b) => (a.page_number ?? 0) - (b.page_number ?? 0));
-    const galleryCells = sortedPages.slice(0, 6).map((p, i) => `
-        <button type="button" class="enc-recap-gallery__cell" data-page-index="${i}" title="Voir la page ${p.page_number}">
-            <img src="${escapeAttr(p.file_path)}" alt="Page ${p.page_number}" loading="lazy">
-        </button>`).join('');
+    const canDeletePages = !isComplete && isEncodageEditable();
+    const galleryCells = sortedPages.slice(0, 6).map((p, i) => {
+        const deleteBtn = canDeletePages && p.id_page
+            ? `<button type="button" class="enc-recap-gallery__delete" data-remove-recap-page="${p.id_page}" title="Supprimer la page ${p.page_number}" aria-label="Supprimer la page">
+                <iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon>
+               </button>`
+            : '';
+
+        return `
+        <div class="enc-recap-gallery__cell-wrap">
+            <button type="button" class="enc-recap-gallery__cell" data-page-index="${i}" title="Voir la page ${p.page_number}">
+                <img src="${escapeAttr(p.file_path)}" alt="Page ${p.page_number}" loading="lazy">
+            </button>
+            ${deleteBtn}
+        </div>`;
+    }).join('');
     const moreCell = sortedPages.length > 6
-        ? `<button type="button" class="enc-recap-gallery__cell enc-recap-gallery__cell--more" data-page-index="6" title="Voir les autres pages">
-            <span>+${sortedPages.length - 6}</span>
-           </button>`
+        ? `<div class="enc-recap-gallery__cell-wrap">
+            <button type="button" class="enc-recap-gallery__cell enc-recap-gallery__cell--more" data-page-index="6" title="Voir les autres pages">
+                <span>+${sortedPages.length - 6}</span>
+            </button>
+           </div>`
         : '';
     const emptyGallery = pageCount === 0
         ? '<div class="enc-recap-gallery__empty">Aucune page scannée</div>'
@@ -2581,6 +2832,20 @@ function setRecapScannedPages(pages) {
     recapScannedPages = (pages || [])
         .slice()
         .sort((a, b) => (a.page_number ?? 0) - (b.page_number ?? 0));
+
+    if (pages?.length) {
+        const byId = new Map(scannedPages.filter((p) => p.id_page).map((p) => [p.id_page, p]));
+        pages.forEach((p) => {
+            if (p.id_page && byId.has(p.id_page)) {
+                const local = byId.get(p.id_page);
+                local.page_number = p.page_number;
+                if (p.file_path) {
+                    local.image = p.file_path;
+                }
+                local.ocrText = p.ocr_text ?? local.ocrText;
+            }
+        });
+    }
 }
 
 function getEncPagesViewerModal() {

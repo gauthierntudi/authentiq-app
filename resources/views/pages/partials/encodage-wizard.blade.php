@@ -55,6 +55,7 @@
             <iconify-icon icon="solar:info-circle-bold-duotone"></iconify-icon>
             <strong>Documents à une page ou plusieurs pages</strong> — Attestation, permis, actes en 1 page : capturez, validez, puis <em>Suivant</em>.
             Documents multipages (livret, dossier…) : validez chaque page avec <em>Ajouter une autre page</em> avant de continuer.
+            Vous pouvez <strong>supprimer</strong> une page erronée via l’icône poubelle (étapes Scanner, OCR ou récapitulatif).
             <br><span class="text-muted small">Placez le document à plat, bon éclairage ; détection automatique des contours A4.</span>
         </div>
         <div id="scanPagesSummary" class="scan-pages-summary" aria-live="polite">
@@ -111,12 +112,16 @@
                 <div>Extraction en cours… <strong id="ocrProgressText">0%</strong></div>
             </div>
         </div>
+        <div id="ocrPagesToolbar" class="scan-pages-summary scan-pages-summary--compact mb-3" hidden>
+            <span class="scan-pages-summary__count" id="ocrPagesCount"></span>
+            <ul id="scanPagesListOcr" class="scan-pages-summary__list list-unstyled mb-0"></ul>
+        </div>
         <div class="mb-3">
             <label class="form-label">Texte extrait</label>
             <textarea id="ocrText" class="form-control" rows="15" placeholder="Le texte extrait du document apparaîtra ici…"></textarea>
             <small class="text-muted d-block mt-1">
                 <iconify-icon icon="solar:pen-2-bold-duotone"></iconify-icon>
-                Vous pouvez modifier le texte si nécessaire
+                Vous pouvez modifier le texte ou supprimer une page erronée via la liste ci-dessus
             </small>
         </div>
         <div class="d-flex flex-wrap gap-2">
