@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Client;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 
 class ClientPhotoStorage
 {
@@ -23,6 +22,8 @@ class ClientPhotoStorage
 
     public function store(Client $client, UploadedFile $file): string
     {
+        $this->documents->assertCloudDiskReady();
+
         $name = 'client_'.$client->id_client.'_'.uniqid().'.jpg';
         $this->disk()->putFileAs('clients', $file, $name, ['visibility' => 'public']);
         $relativePath = 'clients/'.$name;
@@ -49,11 +50,15 @@ class ClientPhotoStorage
         $normalized = $this->normalizePath($path);
         $diskPath = $this->diskPath($normalized);
 
-        if ($this->disk()->exists($diskPath)) {
+        if ($this->documents->diskExists($diskPath)) {
             try {
                 return $this->disk()->temporaryUrl($diskPath, now()->addHours(6));
             } catch (\Throwable) {
-                return $this->disk()->url($diskPath);
+                try {
+                    return $this->disk()->url($diskPath);
+                } catch (\Throwable) {
+                    return null;
+                }
             }
         }
 
@@ -73,8 +78,9 @@ class ClientPhotoStorage
         $normalized = $this->normalizePath($path);
         $diskPath = $this->diskPath($normalized);
 
-        if ($this->disk()->exists($diskPath)) {
-            return $this->disk()->get($diskPath);
+        $bytes = $this->documents->diskGet($diskPath);
+        if ($bytes !== null) {
+            return $bytes;
         }
 
         foreach ($this->legacyFileCandidates($normalized) as $file) {
@@ -100,12 +106,18 @@ class ClientPhotoStorage
         $normalized = $this->normalizePath($client->photo);
         $diskPath = $this->diskPath($normalized);
 
-        if ($this->disk()->exists($diskPath)) {
+        if ($this->documents->diskExists($diskPath)) {
             return true;
         }
 
         $bytes = $this->readBytes($client->photo);
         if ($bytes === null || $bytes === '') {
+            return false;
+        }
+
+        try {
+            $this->documents->assertCloudDiskReady();
+        } catch (\RuntimeException) {
             return false;
         }
 

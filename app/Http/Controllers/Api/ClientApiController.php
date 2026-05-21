@@ -217,6 +217,8 @@ class ClientApiController extends Controller
                 'message' => $message,
                 'client_id' => $client->id_client,
             ]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 503);
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => 'Erreur serveur: '.$e->getMessage()]);
         }

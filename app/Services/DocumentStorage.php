@@ -20,6 +20,61 @@ class DocumentStorage
         return Storage::disk($this->diskName());
     }
 
+    /** S3 utilisable (bucket + credentials renseignés). */
+    public function cloudDiskReady(): bool
+    {
+        if ($this->diskName() !== 's3') {
+            return true;
+        }
+
+        $disk = config('filesystems.disks.s3', []);
+
+        return filled($disk['bucket'] ?? null)
+            && filled($disk['key'] ?? null)
+            && filled($disk['secret'] ?? null);
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    public function assertCloudDiskReady(): void
+    {
+        if ($this->cloudDiskReady()) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'Stockage S3 non configuré : définissez AWS_BUCKET, AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY '
+            .'(Laravel Cloud → Environment, ou activez Object Storage).'
+        );
+    }
+
+    public function diskExists(string $path): bool
+    {
+        if ($this->diskName() === 's3' && ! $this->cloudDiskReady()) {
+            return false;
+        }
+
+        try {
+            return $this->disk()->exists($path);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public function diskGet(string $path): ?string
+    {
+        if (! $this->diskExists($path)) {
+            return null;
+        }
+
+        try {
+            return $this->disk()->get($path);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function prefix(): string
     {
         return trim((string) config('authentiq.documents_path_prefix', 'fileAuthentiq'), '/');
@@ -30,6 +85,8 @@ class DocumentStorage
      */
     public function storeUploadedPage(UploadedFile $file, int $encodageId, int $pageNumber): array
     {
+        $this->assertCloudDiskReady();
+
         $fileName = sprintf('doc_%d_p%d_%s.jpg', $encodageId, $pageNumber, uniqid());
         $relativePath = $this->prefix().'/'.$fileName;
 
@@ -52,6 +109,8 @@ class DocumentStorage
 
     public function storeBinary(string $contents, string $relativePath): string
     {
+        $this->assertCloudDiskReady();
+
         $normalized = $this->normalizePath($relativePath);
         $this->disk()->put($normalized, $contents, ['visibility' => 'public']);
 
@@ -74,11 +133,15 @@ class DocumentStorage
             return rtrim(config('app.url'), '/').'/uploads/'.$normalized;
         }
 
-        if ($this->disk()->exists($normalized)) {
+        if ($this->diskExists($normalized)) {
             try {
                 return $this->disk()->temporaryUrl($normalized, now()->addHours(6));
             } catch (\Throwable) {
-                return $this->disk()->url($normalized);
+                try {
+                    return $this->disk()->url($normalized);
+                } catch (\Throwable) {
+                    return null;
+                }
             }
         }
 
@@ -98,14 +161,20 @@ class DocumentStorage
             $diskPath = substr($diskPath, strlen('uploads/'));
         }
 
-        if ($this->disk()->exists($diskPath)) {
-            $this->disk()->delete($diskPath);
+        if ($this->diskExists($diskPath)) {
+            try {
+                $this->disk()->delete($diskPath);
+            } catch (\Throwable) {
+            }
 
             return;
         }
 
-        if ($this->disk()->exists($normalized)) {
-            $this->disk()->delete($normalized);
+        if ($this->diskExists($normalized)) {
+            try {
+                $this->disk()->delete($normalized);
+            } catch (\Throwable) {
+            }
 
             return;
         }
@@ -130,12 +199,14 @@ class DocumentStorage
             $diskPath = substr($diskPath, strlen('uploads/'));
         }
 
-        if ($this->disk()->exists($diskPath)) {
-            return $this->disk()->get($diskPath);
+        $bytes = $this->diskGet($diskPath);
+        if ($bytes !== null) {
+            return $bytes;
         }
 
-        if ($this->disk()->exists($normalized)) {
-            return $this->disk()->get($normalized);
+        $bytes = $this->diskGet($normalized);
+        if ($bytes !== null) {
+            return $bytes;
         }
 
         foreach ($this->legacyFileCandidates($normalized) as $file) {

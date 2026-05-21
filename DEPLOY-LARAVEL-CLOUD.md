@@ -45,7 +45,7 @@ AUTHENTIQ_REKOGNITION_MIN_SIMILARITY=85
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_DEFAULT_REGION=us-east-1
-AWS_BUCKET=
+AWS_BUCKET=                    # OBLIGATOIRE si AUTHENTIQ_DOCUMENTS_DISK=s3 (sinon erreur HeadObject / Bucket vide)
 
 TWILIO_SID=
 TWILIO_TOKEN=
@@ -61,6 +61,8 @@ MAIL_PASSWORD=
 AUTHENTIQ_MAIL_FROM=
 AUTHENTIQ_MAIL_FROM_NAME=Authentiq
 ```
+
+**Object Storage Laravel Cloud** : Resources → Object Storage → attachez un bucket à l’environnement. Cloud injecte `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_BUCKET`, etc. Vérifiez après deploy que le bucket n’est pas vide : `php artisan tinker` → `config('filesystems.disks.s3.bucket')`.
 
 ## 3. Commande de déploiement (obligatoire)
 
