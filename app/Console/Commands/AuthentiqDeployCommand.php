@@ -39,6 +39,8 @@ class AuthentiqDeployCommand extends Command
             Artisan::call('config:clear');
         }
 
+        $this->call('authentiq:db-status');
+
         $this->newLine();
         $this->info('Déploiement terminé.');
         $this->line('Sur Laravel Cloud, activez aussi :');

@@ -141,10 +141,30 @@ php artisan textract:enqueue-missing --sync
 php artisan migrate:status
 ```
 
-## 10. Mot de passe admin oublié
+## 10. « Identifiants incorrects » après deploy
 
-En local (avec `.env` pointant vers la même base) :
+La base Cloud est **vide** ou mal connectée. Vérifiez :
 
 ```bash
-php ../database/reset-password.php email@example.com "NouveauMotDePasse" --admin
+php artisan authentiq:db-status
+```
+
+Si `USERS` = 0 lignes :
+
+1. **Importer le dump Valet** dans MySQL Cloud (phpMyAdmin / TablePlus / CLI Cloud).
+2. Ou importer le schéma + données de base :
+   ```bash
+   php artisan authentiq:import-legacy-schema
+   ```
+3. Puis créer/réinitialiser un mot de passe (console Cloud) :
+   ```bash
+   php artisan authentiq:reset-password gauthierntudi@gmail.com "VotreMotDePasse" --admin
+   ```
+
+Vérifiez aussi que les variables `DB_*` sur Cloud pointent vers la **même** base que celle où vous avez importé le SQL.
+
+## 11. Mot de passe admin (Cloud ou local)
+
+```bash
+php artisan authentiq:reset-password email@example.com "NouveauMotDePasse" --admin
 ```
