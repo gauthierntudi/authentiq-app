@@ -70,7 +70,7 @@ function initEncodageResume() {
 function renderEncDataLoader() {
     return `
         <div class="enc-data-loader" role="status" aria-live="polite" aria-busy="true">
-            <div class="enc-data-loader__ring" aria-hidden="true"></div>
+            <div class="enc-data-loader__spinner" aria-hidden="true"></div>
             <p class="enc-data-loader__title">Veuillez patienter</p>
             <p class="enc-data-loader__hint">Nous chargeons vos données pour l'affichage</p>
         </div>`;
