@@ -64,15 +64,26 @@ class DocumentStorage
 
     public function diskGet(string $path): ?string
     {
-        if (! $this->diskExists($path)) {
+        if ($this->diskName() === 's3' && ! $this->cloudDiskReady()) {
             return null;
         }
 
         try {
-            return $this->disk()->get($path);
+            $contents = $this->disk()->get($path);
+            if ($contents !== false && $contents !== '') {
+                return $contents;
+            }
         } catch (\Throwable) {
-            return null;
         }
+
+        if ($this->diskExists($path)) {
+            try {
+                return $this->disk()->get($path);
+            } catch (\Throwable) {
+            }
+        }
+
+        return null;
     }
 
     public function prefix(): string
@@ -134,14 +145,18 @@ class DocumentStorage
         }
 
         if ($this->diskExists($normalized)) {
-            try {
-                return $this->disk()->temporaryUrl($normalized, now()->addHours(6));
-            } catch (\Throwable) {
-                try {
-                    return $this->disk()->url($normalized);
-                } catch (\Throwable) {
-                    return null;
-                }
+            $signed = $this->temporaryUrlOrNull($normalized);
+
+            if ($signed !== null) {
+                return $signed;
+            }
+        }
+
+        if ($this->diskName() === 's3' && $this->cloudDiskReady()) {
+            $signed = $this->temporaryUrlOrNull($normalized);
+
+            if ($signed !== null) {
+                return $signed;
             }
         }
 
@@ -218,6 +233,19 @@ class DocumentStorage
         }
 
         return null;
+    }
+
+    private function temporaryUrlOrNull(string $path): ?string
+    {
+        try {
+            return $this->disk()->temporaryUrl($path, now()->addHours(6));
+        } catch (\Throwable) {
+            try {
+                return $this->disk()->url($path);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
     }
 
     private function legacyPublicUrl(string $normalized): ?string

@@ -51,14 +51,18 @@ class ClientPhotoStorage
         $diskPath = $this->diskPath($normalized);
 
         if ($this->documents->diskExists($diskPath)) {
-            try {
-                return $this->disk()->temporaryUrl($diskPath, now()->addHours(6));
-            } catch (\Throwable) {
-                try {
-                    return $this->disk()->url($diskPath);
-                } catch (\Throwable) {
-                    return null;
-                }
+            $signed = $this->temporaryUrlOrNull($diskPath);
+
+            if ($signed !== null) {
+                return $signed;
+            }
+        }
+
+        if ($this->diskName() === 's3' && $this->documents->cloudDiskReady()) {
+            $signed = $this->temporaryUrlOrNull($diskPath);
+
+            if ($signed !== null) {
+                return $signed;
             }
         }
 
@@ -134,9 +138,34 @@ class ClientPhotoStorage
         return true;
     }
 
+    public function bytesFromUpload(UploadedFile $file): ?string
+    {
+        $path = $file->getRealPath();
+        if (! $path || ! is_readable($path)) {
+            return null;
+        }
+
+        $bytes = file_get_contents($path);
+
+        return ($bytes !== false && $bytes !== '') ? $bytes : null;
+    }
+
     public function normalizePath(string $path): string
     {
         return ltrim(str_replace(['../', '..\\'], '', $path), '/\\');
+    }
+
+    private function temporaryUrlOrNull(string $diskPath): ?string
+    {
+        try {
+            return $this->disk()->temporaryUrl($diskPath, now()->addHours(6));
+        } catch (\Throwable) {
+            try {
+                return $this->disk()->url($diskPath);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
     }
 
     private function diskPath(string $normalized): string

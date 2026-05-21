@@ -162,14 +162,18 @@ class ClientApiController extends Controller
                     'adresse' => $data['adresse'] ?? '',
                 ];
 
-                if ($request->hasFile('photo')) {
-                    $updateData['photo'] = $this->clientPhotos->store($client, $request->file('photo'));
+                $photoFile = $request->hasFile('photo') ? $request->file('photo') : null;
+                if ($photoFile) {
+                    $updateData['photo'] = $this->clientPhotos->store($client, $photoFile);
                 }
 
                 $client->update($updateData);
 
-                if ($request->hasFile('photo')) {
-                    $this->indexClientFaceNow($client->fresh());
+                if ($photoFile) {
+                    $this->indexClientFaceNow(
+                        $client->fresh(),
+                        $this->clientPhotos->bytesFromUpload($photoFile),
+                    );
                 }
 
                 return response()->json([
@@ -361,14 +365,18 @@ class ClientApiController extends Controller
         ], 409);
     }
 
-    private function indexClientFaceNow(?Client $client): void
+    private function indexClientFaceNow(?Client $client, ?string $photoBytes = null): void
     {
         if (! $client || ! $this->rekognition->enabled()) {
             return;
         }
 
         try {
-            $this->rekognition->indexClientFromStoredPhoto($client);
+            if ($photoBytes !== null && $photoBytes !== '') {
+                $this->rekognition->indexClientFace($client, $photoBytes);
+            } else {
+                $this->rekognition->indexClientFromStoredPhoto($client);
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Rekognition index sync failed', [
                 'client_id' => $client->id_client,
