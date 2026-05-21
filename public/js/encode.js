@@ -41,6 +41,7 @@ let pendingResumePayload = null;
 let clientAwaitingOtp = false;
 let pendingOtpGoNext = false;
 let otpClientIdForVerification = null;
+let encodageStatus = 'incomplete';
 
 let newClientCameraStream = null;
 let encNewClientCroppedBlob = null;
@@ -86,9 +87,90 @@ function tryApplyPendingResume() {
     pendingResumePayload = null;
 }
 
+function isEncodageEditable() {
+    return encodageStatus === 'incomplete';
+}
+
+function setEncodageStatus(status) {
+    encodageStatus = status || 'incomplete';
+    syncWizardEditability();
+}
+
+function syncWizardEditability() {
+    const editable = isEncodageEditable();
+    const hint = document.getElementById('encodageEditHint');
+
+    document.querySelectorAll('.encodage-wizard .stepper-header .step-item[data-step]').forEach((item) => {
+        item.classList.toggle('is-editable', editable);
+        item.disabled = !editable && parseInt(item.dataset.step, 10) < 5;
+    });
+
+    if (hint) {
+        hint.hidden = !editable;
+    }
+}
+
+function getStepBlockedMessage(step) {
+    if (!encodageId) {
+        return 'Enregistrez d\'abord au moins une page scannée (étape 1).';
+    }
+    if (step === 2 && scannedPages.length === 0) {
+        return 'Scannez au moins une page avant l\'étape OCR.';
+    }
+
+    return 'Complétez les étapes précédentes avant de continuer.';
+}
+
+function canNavigateToStep(step) {
+    if (encodageStatus === 'complete') {
+        return step === 5;
+    }
+    if (step === 1) {
+        return true;
+    }
+    if (!encodageId) {
+        return false;
+    }
+
+    return true;
+}
+
+function bindStepperNavigation() {
+    document.querySelectorAll('.encodage-wizard .stepper-header .step-item[data-step]').forEach((item) => {
+        item.addEventListener('click', () => {
+            const step = parseInt(item.dataset.step, 10);
+            if (Number.isNaN(step)) {
+                return;
+            }
+
+            if (!isEncodageEditable() && step < 5) {
+                iziToast.info({
+                    message: 'Encodage finalisé : les modifications ne sont plus possibles.',
+                });
+
+                return;
+            }
+
+            if (!canNavigateToStep(step)) {
+                iziToast.warning({ message: getStepBlockedMessage(step) });
+
+                return;
+            }
+
+            if (step === 5 && encodageId) {
+                loadRecapitulatif();
+            }
+
+            goToStep(step);
+        });
+    });
+}
+
 function applyResumedEncodage(data) {
     const enc = data.encodage;
     const pages = data.pages || [];
+
+    setEncodageStatus(enc.status);
 
     encodageId = enc.id_encodage;
     clientId = enc.id_client || null;
@@ -249,6 +331,8 @@ function setupEventListeners() {
     setupScanCameraModal();
 
     bindWizardNavigation();
+    bindStepperNavigation();
+    syncWizardEditability();
     setupEncodageOtp();
 }
 
@@ -268,7 +352,21 @@ function bindWizardNavigation() {
         const btn = e.target.closest('button[id^="prevStep"]');
         if (!btn || !prevMap[btn.id]) return;
         e.preventDefault();
-        goToStep(prevMap[btn.id]);
+
+        const targetStep = prevMap[btn.id];
+        if (!isEncodageEditable() && targetStep < 5) {
+            iziToast.info({
+                message: 'Encodage finalisé : les modifications ne sont plus possibles.',
+            });
+
+            return;
+        }
+
+        if (targetStep === 5 && encodageId) {
+            loadRecapitulatif();
+        }
+
+        goToStep(targetStep);
     });
 }
 
@@ -1072,6 +1170,7 @@ function saveImageAndOCR() {
         if (data.status === 'success') {
             encodageId = data.encodageId;
             document.getElementById('encodageId').value = encodageId;
+            setEncodageStatus('incomplete');
             iziToast.success({ message: `${scannedPages.length} page(s) sauvegardée(s).` });
             if (data.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
                 pollTextractOcr(encodageId);
@@ -1702,13 +1801,25 @@ function saveDocumentInfo(andGoNext = false) {
         headers: encodeApiHeaders(),
         body: formData,
     })
-    .then(response => response.json())
-    .then(data => {
+    .then((response) => response.json().then((data) => ({ data, status: response.status })))
+    .then(({ data, status }) => {
+        if (status === 423) {
+            iziToast.error({ message: data.message || 'Modification impossible : encodage finalisé.' });
+            setEncodageStatus('complete');
+
+            return;
+        }
         if (data.status === 'success') {
-            iziToast.success({ message: 'Informations document sauvegardées.' });
+            iziToast.success({
+                message: andGoNext
+                    ? 'Document enregistré.'
+                    : 'Document enregistré. Vous pouvez encore modifier avant la finalisation.',
+            });
             if (andGoNext) {
                 loadRecapitulatif();
                 goToStep(5);
+            } else if (currentStep === 5 && encodageId) {
+                loadRecapitulatif();
             }
         } else {
             iziToast.error({ message: data.message });
@@ -2334,6 +2445,22 @@ function renderRecapitulatifHtml(data) {
         ? '<div class="enc-recap-gallery__empty">Aucune page scannée</div>'
         : '';
 
+    const editActions = isComplete
+        ? ''
+        : `
+            <div class="enc-recap-edit-actions" role="group" aria-label="Modifier l'encodage">
+                <span class="enc-recap-edit-actions__label">Modifier avant validation :</span>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="1">
+                    <iconify-icon icon="solar:camera-bold-duotone"></iconify-icon> Pages scannées
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="3">
+                    <iconify-icon icon="solar:user-bold-duotone"></iconify-icon> Client
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="4">
+                    <iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Document
+                </button>
+            </div>`;
+
     const verifyBody = qr.qr_url
         ? `
             <p class="enc-recap-verify__ref-label">Référence</p>
@@ -2351,6 +2478,7 @@ function renderRecapitulatifHtml(data) {
         `;
 
     return `
+        ${editActions}
         <div class="enc-recap-bento">
             <div class="enc-recap-bento__row enc-recap-bento__row--top">
                 <article class="enc-recap-tile enc-recap-tile--profile">
@@ -2556,6 +2684,21 @@ function initRecapitulatifInteractions() {
     const recap = document.getElementById('recapitulatif');
     if (!recap) return;
 
+    recap.querySelectorAll('[data-edit-step]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const step = parseInt(btn.getAttribute('data-edit-step'), 10);
+            if (Number.isNaN(step) || !isEncodageEditable()) {
+                return;
+            }
+            if (!canNavigateToStep(step)) {
+                iziToast.warning({ message: getStepBlockedMessage(step) });
+
+                return;
+            }
+            goToStep(step);
+        });
+    });
+
     recap.querySelectorAll('.enc-recap-gallery__cell[data-page-index]').forEach((cell) => {
         cell.addEventListener('click', () => {
             const idx = parseInt(cell.getAttribute('data-page-index'), 10);
@@ -2587,6 +2730,10 @@ function initRecapitulatifInteractions() {
 function syncRecapFinalizeButton(data) {
     const submitBtn = document.getElementById('submitBtn');
     if (!submitBtn) return;
+
+    if (data?.encodage?.status) {
+        setEncodageStatus(data.encodage.status);
+    }
 
     const isComplete = data?.encodage?.status === 'complete';
     submitBtn.disabled = isComplete;
@@ -2650,6 +2797,7 @@ function finalizeEncodage() {
         .then((data) => {
             setFinalizeLoading(false);
             if (data.status === 'success') {
+                setEncodageStatus('complete');
                 let msg = 'Encodage finalisé avec succès !';
                 if (data.numero) {
                     msg += ` Référence : ${data.numero}.`;
@@ -2674,6 +2822,20 @@ function finalizeEncodage() {
 function goToStep(stepNumber) {
     const wizard = document.querySelector('.encodage-wizard');
     if (!wizard) return;
+
+    if (!canNavigateToStep(stepNumber)) {
+        iziToast.warning({ message: getStepBlockedMessage(stepNumber) });
+
+        return;
+    }
+
+    if (!isEncodageEditable() && stepNumber < 5) {
+        iziToast.info({
+            message: 'Encodage finalisé : les modifications ne sont plus possibles.',
+        });
+
+        return;
+    }
 
     wizard.querySelectorAll('.step').forEach((step) => step.classList.remove('active'));
 

@@ -26,6 +26,40 @@
     flex: 1;
     text-align: center;
     position: relative;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    cursor: default;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+}
+
+.encodage-wizard .stepper-header .step-item.is-editable {
+    cursor: pointer;
+}
+
+.encodage-wizard .stepper-header .step-item.is-editable:hover .step-number {
+    border-color: rgba(14, 237, 238, 0.6);
+}
+
+.encodage-wizard .stepper-header .step-item:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.encodage-wizard__edit-hint {
+    padding: 0.65rem 1rem;
+    background: rgba(14, 237, 238, 0.06);
+    border: 1px dashed rgba(14, 237, 238, 0.25);
+    border-radius: 12px;
+}
+
+.encodage-step-hint iconify-icon {
+    vertical-align: -0.15em;
+    margin-right: 0.25rem;
+    color: #0eedee;
 }
 
 .encodage-wizard .stepper-header .step-item:not(:last-child)::after {
@@ -1007,6 +1041,25 @@
     color: #8b93a8;
     line-height: 1.45;
     max-width: 36rem;
+}
+
+.enc-recap-edit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(14, 237, 238, 0.06);
+    border: 1px solid rgba(14, 237, 238, 0.2);
+    border-radius: 14px;
+}
+
+.enc-recap-edit-actions__label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8b93a8;
+    margin-right: 0.25rem;
 }
 
 .enc-recap {

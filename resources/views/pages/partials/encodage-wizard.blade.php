@@ -23,28 +23,31 @@
         </div>
     </div>
 
-    <div class="stepper-header">
-        <div class="step-item active" data-step="1">
+    <div class="stepper-header" role="navigation" aria-label="Étapes d'encodage">
+        <button type="button" class="step-item active" data-step="1" title="Scanner le document">
             <div class="step-number">1</div>
             <div class="step-title">Scanner</div>
-        </div>
-        <div class="step-item" data-step="2">
+        </button>
+        <button type="button" class="step-item" data-step="2" title="Texte OCR">
             <div class="step-number">2</div>
             <div class="step-title">OCR</div>
-        </div>
-        <div class="step-item" data-step="3">
+        </button>
+        <button type="button" class="step-item" data-step="3" title="Client">
             <div class="step-number">3</div>
             <div class="step-title">Client</div>
-        </div>
-        <div class="step-item" data-step="4">
+        </button>
+        <button type="button" class="step-item" data-step="4" title="Type et dates du document">
             <div class="step-number">4</div>
             <div class="step-title">Document</div>
-        </div>
-        <div class="step-item" data-step="5">
+        </button>
+        <button type="button" class="step-item" data-step="5" title="Récapitulatif et validation">
             <div class="step-number">5</div>
             <div class="step-title">Finaliser</div>
-        </div>
+        </button>
     </div>
+    <p id="encodageEditHint" class="encodage-wizard__edit-hint text-muted small mb-3">
+        Tant que l'encodage n'est pas finalisé, vous pouvez revenir modifier les pages, le client ou le document via les étapes ci-dessus ou les boutons du récapitulatif.
+    </p>
 
     <div id="step1" class="step active">
         <h4><iconify-icon icon="solar:camera-bold-duotone"></iconify-icon> Scannez votre document</h4>
@@ -279,6 +282,10 @@
 
     <div id="step4" class="step">
         <h4><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Informations du document</h4>
+        <div class="alert alert-light border mb-3 py-2 small encodage-step-hint">
+            <iconify-icon icon="solar:pen-bold-duotone"></iconify-icon>
+            Vous pouvez modifier le type, le montant et les dates à tout moment avant la finalisation. Enregistrez puis retournez au récapitulatif avec <strong>Suivant</strong>.
+        </div>
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Type de document <span class="text-danger">*</span></label>
@@ -337,7 +344,7 @@
                 <iconify-icon icon="solar:arrow-left-bold-duotone"></iconify-icon>
                 <span>Précédent</span>
             </button>
-            <button id="submitBtn" type="button" class="btn btn-primary fw-semibold btn-lg" style="border-radius:12px" disabled>
+            <button id="submitBtn" type="button" class="btn btn-primary fw-semibold btn-lg" style="border-radius:12px">
                 <iconify-icon icon="solar:verified-check-bold-duotone" class="js-finalize-icon"></iconify-icon>
                 <span class="js-finalize-label">Finaliser l'encodage</span>
             </button>

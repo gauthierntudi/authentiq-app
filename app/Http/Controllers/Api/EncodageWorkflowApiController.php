@@ -62,6 +62,18 @@ class EncodageWorkflowApiController extends Controller
         return $query->first();
     }
 
+    private function assertEncodageEditable(Encodage $encodage): ?JsonResponse
+    {
+        if ($encodage->status !== 'incomplete') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cet encodage est finalisé ou expiré : modification impossible.',
+            ], 423);
+        }
+
+        return null;
+    }
+
     /** Legacy: getDocTypes — retourne un tableau JSON direct. */
     public function docTypes(): JsonResponse
     {
@@ -99,6 +111,10 @@ class EncodageWorkflowApiController extends Controller
                     $encodage = $this->encodageForUser($encodageId, $user);
                     if (! $encodage) {
                         return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
+                    }
+
+                    if ($blocked = $this->assertEncodageEditable($encodage)) {
+                        return $blocked;
                     }
 
                     foreach ($encodage->pages as $page) {
@@ -254,6 +270,10 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
         }
 
+        if ($blocked = $this->assertEncodageEditable($encodage)) {
+            return $blocked;
+        }
+
         try {
             $clientId = (int) $request->input('clientId', 0);
             $requiresOtp = false;
@@ -383,6 +403,10 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
         }
 
+        if ($blocked = $this->assertEncodageEditable($encodage)) {
+            return $blocked;
+        }
+
         $doc = Doc::query()->find($docTypeId);
         if (! $doc) {
             return response()->json(['status' => 'error', 'message' => 'Type de document introuvable.']);
@@ -468,6 +492,17 @@ class EncodageWorkflowApiController extends Controller
         $encodage = $this->encodageForUser($id, $user);
         if (! $encodage) {
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
+        }
+
+        if ($encodage->status === 'complete') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cet encodage est déjà finalisé.',
+            ], 423);
+        }
+
+        if ($blocked = $this->assertEncodageEditable($encodage)) {
+            return $blocked;
         }
 
         if (! $encodage->id_client) {
@@ -594,8 +629,13 @@ class EncodageWorkflowApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Paramètres manquants.']);
         }
 
-        if (! $this->encodageForUser($encodageId, $user)) {
+        $encodage = $this->encodageForUser($encodageId, $user);
+        if (! $encodage) {
             return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
+        }
+
+        if ($blocked = $this->assertEncodageEditable($encodage)) {
+            return $blocked;
         }
 
         $page = EncodagePage::query()
