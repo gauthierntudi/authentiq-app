@@ -1,0 +1,145 @@
+/**
+ * Overlays modaux Authentiq — fond sombre uniforme
+ */
+.modal-backdrop,
+.modal-backdrop.fade,
+.modal-backdrop.show {
+    background-color: rgba(0, 0, 0, 0.82) !important;
+    opacity: 1 !important;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+
+/* Évite le voile clair ajouté page par page sur body.modal-open */
+body.modal-open::before {
+    display: none !important;
+}
+
+.offcanvas-backdrop,
+.offcanvas-backdrop.show {
+    background-color: rgba(0, 0, 0, 0.82) !important;
+    opacity: 1 !important;
+}
+
+.iziToast-overlay {
+    background: rgba(0, 0, 0, 0.75) !important;
+}
+
+/* Modal doublon client */
+.client-duplicate-modal__content {
+    background: #161a26;
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.client-duplicate-modal__header {
+    border-bottom: 1px solid rgba(64, 70, 94, 0.45);
+    background: rgba(248, 113, 113, 0.08);
+}
+
+.client-duplicate-modal__subtitle {
+    font-size: 0.78rem;
+    color: #8b93a8;
+    margin-top: 0.2rem;
+}
+
+.client-duplicate-modal__alert {
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    color: #fca5a5;
+    font-size: 0.88rem;
+    border-radius: 12px;
+    margin: 0;
+}
+
+.client-duplicate-modal__card {
+    border-radius: 16px;
+    background: rgba(22, 26, 38, 0.95);
+    border: 1px solid rgba(64, 70, 94, 0.55);
+    padding: 1rem;
+}
+
+.client-duplicate-modal__card-head {
+    display: flex;
+    gap: 0.85rem;
+    align-items: center;
+    margin-bottom: 0.85rem;
+}
+
+.client-duplicate-modal__photo {
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(14, 237, 238, 0.4);
+    flex-shrink: 0;
+}
+
+.client-duplicate-modal__conflict-type {
+    margin: 0 0 0.2rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #f87171;
+    font-weight: 700;
+}
+
+.client-duplicate-modal__name {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.client-duplicate-modal__similarity {
+    display: inline-block;
+    margin-left: 0.35rem;
+    font-size: 0.68rem;
+    color: #0eedee;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.client-duplicate-modal__tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.2em 0.5em;
+    border-radius: 6px;
+}
+
+.client-duplicate-modal__tag--active {
+    background: rgba(52, 211, 153, 0.2);
+    color: #6ee7b7;
+}
+
+.client-duplicate-modal__tag--pending {
+    background: rgba(255, 193, 7, 0.15);
+    color: #fcd34d;
+}
+
+.client-duplicate-modal__details li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    font-size: 0.85rem;
+    color: #e8ecf4;
+    border-top: 1px solid rgba(64, 70, 94, 0.35);
+}
+
+.client-duplicate-modal__details li:first-child {
+    border-top: none;
+}
+
+.client-duplicate-modal__details iconify-icon {
+    color: #0eedee;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.client-duplicate-modal__footer {
+    border-top: 1px solid rgba(64, 70, 94, 0.45);
+    gap: 0.5rem;
+}
