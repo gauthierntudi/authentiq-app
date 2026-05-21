@@ -336,7 +336,7 @@ class ReportService
                 'client_photo_url' => $this->clientPhotos->photoUrl(
                     $e->client?->photo,
                     $e->client?->id_client,
-                    $e->client?->updated_at?->getTimestamp(),
+                    $e->client?->photoCacheVersion(),
                 ),
                 'type_doc' => $e->doc?->nom_doc ?: $e->type_doc,
                 'agent_nom' => $e->user?->nom_complet,

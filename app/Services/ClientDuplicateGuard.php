@@ -117,7 +117,7 @@ class ClientDuplicateGuard
             'photo_url' => $this->clientPhotos->photoUrl(
                 $client->photo,
                 $client->id_client,
-                $client->updated_at?->getTimestamp(),
+                $client->photoCacheVersion(),
             ),
             'is_active' => (int) $client->is_active,
             'type_piece_identite' => $client->type_piece_identite,

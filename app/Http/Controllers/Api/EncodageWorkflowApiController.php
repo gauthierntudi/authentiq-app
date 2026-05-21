@@ -486,7 +486,7 @@ class EncodageWorkflowApiController extends Controller
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $encodage->client?->photo,
                     $encodage->client?->id_client,
-                    $encodage->client?->updated_at?->getTimestamp(),
+                    $encodage->client?->photoCacheVersion(),
                 ),
             ],
             'document' => [

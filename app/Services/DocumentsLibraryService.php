@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Client;
 use App\Models\Encodage;
 use App\Models\EncodagePage;
 use App\Models\User;
@@ -31,7 +32,7 @@ class DocumentsLibraryService
                 'numero', 'qr_path', 'page_count', 'affectation', 'created_at', 'updated_at',
             ])
             ->with([
-                'client:id_client,nom_complet,photo,updated_at',
+                'client:'.Client::EAGER_SELECT,
                 'doc:id_doc,nom_doc,type_doc',
                 'pages' => fn ($q) => $q
                     ->select('id_page', 'id_encodage', 'page_number', 'file_path', 'file_size')
@@ -122,7 +123,7 @@ class DocumentsLibraryService
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $client?->photo,
                     $idClient > 0 ? $idClient : null,
-                    $client?->updated_at?->getTimestamp(),
+                    $client?->photoCacheVersion(),
                 ),
                 'encodages_count' => $items->count(),
                 'pages_count' => $pagesCount,
@@ -160,7 +161,7 @@ class DocumentsLibraryService
             'client_photo_url' => $this->clientPhotos->photoUrl(
                 $e->client?->photo,
                 $e->client?->id_client,
-                $e->client?->updated_at?->getTimestamp(),
+                $e->client?->photoCacheVersion(),
             ),
             'type_doc' => $typeDoc,
             'status' => $e->status,

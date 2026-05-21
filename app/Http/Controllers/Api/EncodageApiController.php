@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\Encodage;
 use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
@@ -32,7 +33,7 @@ class EncodageApiController extends Controller
                 'status', 'page_count', 'affectation', 'created_at', 'updated_at',
             ])
             ->with([
-                'client:id_client,nom_complet,photo,updated_at',
+                'client:'.Client::EAGER_SELECT,
                 'doc:id_doc,nom_doc,type_doc',
                 'user:id_user,nom_complet',
                 'commune:id_commune,nom',
@@ -171,7 +172,7 @@ class EncodageApiController extends Controller
             'client_photo_url' => $this->clientPhotos->photoUrl(
                 $e->client?->photo,
                 $e->client?->id_client,
-                $e->client?->updated_at?->getTimestamp(),
+                $e->client?->photoCacheVersion(),
             ),
             'type_doc' => $typeDoc,
             'nb_pages' => (int) ($e->page_count ?? 0),

@@ -63,9 +63,9 @@ class ClientApiController extends Controller
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $c->photo,
                     $c->id_client,
-                    $c->updated_at?->getTimestamp(),
+                    $c->photoCacheVersion(),
                 ),
-                'updated_at' => $c->updated_at?->toIso8601String(),
+                'updated_at' => $c->created_at?->toIso8601String(),
             ]);
 
         return response()->json(['status' => 'success', 'data' => $clients]);
@@ -112,7 +112,7 @@ class ClientApiController extends Controller
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $client->photo,
                     $client->id_client,
-                    $client->updated_at?->getTimestamp(),
+                    $client->photoCacheVersion(),
                 ),
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,
@@ -212,7 +212,7 @@ class ClientApiController extends Controller
                     'photo_url' => $this->clientPhotos->photoUrl(
                         $client->photo,
                         $client->id_client,
-                        $client->updated_at?->getTimestamp(),
+                        $client->photoCacheVersion(),
                     ),
                 ]);
             }
@@ -357,7 +357,7 @@ class ClientApiController extends Controller
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $client->photo,
                     $client->id_client,
-                    $client->updated_at?->getTimestamp(),
+                    $client->photoCacheVersion(),
                 ),
                 'is_active' => (int) $client->is_active,
                 'type_piece_identite' => $client->type_piece_identite,
