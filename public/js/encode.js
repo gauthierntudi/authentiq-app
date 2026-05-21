@@ -67,7 +67,52 @@ function initEncodageResume() {
     }
 }
 
+function renderEncDataLoader() {
+    return `
+        <div class="enc-data-loader" role="status" aria-live="polite" aria-busy="true">
+            <div class="enc-data-loader__ring" aria-hidden="true"></div>
+            <p class="enc-data-loader__title">Veuillez patienter</p>
+            <p class="enc-data-loader__hint">Nous chargeons vos données pour l'affichage</p>
+        </div>`;
+}
+
+function showEncPagesLoader(hostId) {
+    const host = document.getElementById(hostId);
+    if (!host) {
+        return;
+    }
+
+    host.classList.add('is-loading');
+    host.setAttribute('aria-busy', 'true');
+
+    let overlay = host.querySelector(':scope > .enc-data-loader-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'enc-data-loader-overlay';
+        overlay.innerHTML = renderEncDataLoader();
+        host.appendChild(overlay);
+    }
+
+    overlay.hidden = false;
+}
+
+function hideEncPagesLoader(hostId) {
+    const host = document.getElementById(hostId);
+    if (!host) {
+        return;
+    }
+
+    host.classList.remove('is-loading');
+    host.removeAttribute('aria-busy');
+
+    const overlay = host.querySelector(':scope > .enc-data-loader-overlay');
+    if (overlay) {
+        overlay.hidden = true;
+    }
+}
+
 function resumeEncodage(id) {
+    showEncPagesLoader('scanPagesSummary');
     fetch(`${ENCODAGE_API}/${id}/resume`, { headers: encodeApiHeaders() })
         .then(res => res.json())
         .then(data => {
@@ -78,7 +123,8 @@ function resumeEncodage(id) {
             pendingResumePayload = data;
             tryApplyPendingResume();
         })
-        .catch(() => iziToast.error({ message: 'Erreur lors de la reprise de l\'encodage.' }));
+        .catch(() => iziToast.error({ message: 'Erreur lors de la reprise de l\'encodage.' }))
+        .finally(() => hideEncPagesLoader('scanPagesSummary'));
 }
 
 function tryApplyPendingResume() {
@@ -861,6 +907,8 @@ async function removeScannedPageOnServer(idPage) {
     formData.append('encodageId', encodageId);
     formData.append('pageId', idPage);
 
+    showEncPagesLoader('scanPagesSummary');
+
     try {
         const response = await fetch(`${ENCODAGE_API}/delete-page`, {
             method: 'POST',
@@ -897,6 +945,8 @@ async function removeScannedPageOnServer(idPage) {
         iziToast.error({ message: 'Erreur lors de la suppression de la page.' });
 
         return false;
+    } finally {
+        hideEncPagesLoader('scanPagesSummary');
     }
 }
 
@@ -1380,6 +1430,8 @@ function pageNeedsOcr(page) {
 }
 
 function processAllPagesOCR() {
+    showEncPagesLoader('step2');
+
     const ocrProgress = document.getElementById('ocrProgress');
     const ocrProgressText = document.getElementById('ocrProgressText');
     const ocrTextArea = document.getElementById('ocrText');
@@ -1481,11 +1533,14 @@ async function ensurePageBlobsForUpload() {
 }
 
 async function saveImageAndOCR() {
+    showEncPagesLoader('step2');
+
     try {
         await ensurePageBlobsForUpload();
     } catch (err) {
         console.error('ensurePageBlobsForUpload:', err);
         iziToast.error({ message: 'Impossible de préparer les fichiers des pages pour l\'envoi.' });
+        hideEncPagesLoader('step2');
 
         return;
     }
@@ -1495,6 +1550,7 @@ async function saveImageAndOCR() {
         iziToast.error({
             message: `${missing.length} page(s) sans fichier image. Repassez par l\'étape scan (Suivant).`,
         });
+        hideEncPagesLoader('step2');
 
         return;
     }
@@ -1551,7 +1607,8 @@ async function saveImageAndOCR() {
     .catch(error => {
         console.error('Erreur:', error);
         iziToast.error({ message: 'Erreur lors de la sauvegarde.' });
-    });
+    })
+    .finally(() => hideEncPagesLoader('step2'));
 }
 
 function loadDocumentTypes() {
@@ -2726,11 +2783,7 @@ function setupClientPhotoSearch() {
 function renderRecapitulatifLoading() {
     const recap = document.getElementById('recapitulatif');
     if (!recap) return;
-    recap.innerHTML = `
-        <div class="enc-recap__loading">
-            <div class="enc-recap__loading-spinner" role="status"></div>
-            <p class="enc-recap__loading-text">Chargement du récapitulatif…</p>
-        </div>`;
+    recap.innerHTML = `<div class="enc-recap__loading">${renderEncDataLoader()}</div>`;
 }
 
 function formatEncDate(val) {
