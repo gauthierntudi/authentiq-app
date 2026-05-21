@@ -27,9 +27,24 @@ php artisan serve
 
 ## Base de données
 
-Le projet utilise la même base MySQL que l'app legacy (`authentiq.db` sur le port MAMP `8889`).
+Le projet utilise MySQL (tables legacy `USERS`, `ENCODAGES`, `CLIENTS`, etc.).
 
 Schéma de référence : `database/schema-legacy.sql`
+
+**Import automatique (local ou Laravel Cloud) :**
+
+```bash
+php artisan authentiq:import-legacy-schema
+php artisan migrate --force
+```
+
+**Tout-en-un post-déploiement :**
+
+```bash
+php artisan authentiq:deploy --force
+```
+
+Voir **[DEPLOY-LARAVEL-CLOUD.md](DEPLOY-LARAVEL-CLOUD.md)** pour GitHub + Laravel Cloud (variables, queue, scheduler).
 
 ## Assets & design
 

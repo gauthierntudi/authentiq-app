@@ -119,10 +119,12 @@ CREATE TABLE `ENCODAGES` (
   `date_emission` date DEFAULT NULL,
   `date_expiration` date DEFAULT NULL,
   `id_commune` int(11) DEFAULT NULL,
-  `status` enum('incomplete','complete') DEFAULT 'incomplete',
+  `status` enum('incomplete','complete','expired') NOT NULL DEFAULT 'incomplete',
   `page_count` int(11) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `numero` varchar(32) DEFAULT NULL,
+  `qr_path` varchar(512) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 --
@@ -145,7 +147,8 @@ CREATE TABLE `ENCODAGES_PAGES` (
   `file_path` varchar(500) NOT NULL COMMENT 'Chemin du fichier scanné',
   `file_size` int(11) DEFAULT NULL COMMENT 'Taille du fichier en bytes',
   `ocr_text` text COMMENT 'Texte OCR de cette page spécifique',
-  `quality_score` decimal(3,2) DEFAULT NULL COMMENT 'Score de qualité du scan (0-100)',
+  `textract_status` varchar(20) DEFAULT NULL COMMENT 'queued|processing|succeeded|failed',
+  `quality_score` decimal(5,2) DEFAULT NULL COMMENT 'Score de qualité OCR Textract (0-100)',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Pages scannées pour chaque encodage';
 
