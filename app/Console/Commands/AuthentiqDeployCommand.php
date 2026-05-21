@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Artisan;
 class AuthentiqDeployCommand extends Command
 {
     protected $signature = 'authentiq:deploy
+                            {--force : Ignoré (migrate est toujours exécuté avec --force en production)}
                             {--skip-import : Ne pas tenter l\'import schema-legacy.sql}
                             {--skip-aws : Ne pas exécuter rekognition:ensure-collection}';
 

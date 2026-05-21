@@ -67,7 +67,7 @@ AUTHENTIQ_MAIL_FROM_NAME=Authentiq
 Dans **App cluster → Deployments → Deploy commands**, une seule ligne :
 
 ```bash
-php artisan authentiq:deploy --force
+php artisan authentiq:deploy
 ```
 
 Cette commande :
@@ -95,7 +95,7 @@ mysqldump -u root -p -h 127.0.0.1 -P 3306 authentiq.db > authentiq-valet-complet
 Importe `authentiq-valet-complet.sql` dans MySQL Cloud, puis deploy :
 
 ```bash
-php artisan authentiq:deploy --force --skip-import
+php artisan authentiq:deploy --skip-import
 ```
 
 **Base Cloud vide** (première install) : laisse `authentiq:deploy` importer `schema-legacy.sql` + migrations.
@@ -105,7 +105,7 @@ php artisan authentiq:deploy --force --skip-import
 Si tu as déjà importé un dump SQL sur Cloud :
 
 ```bash
-php artisan authentiq:deploy --force --skip-import
+php artisan authentiq:deploy --skip-import
 ```
 
 Sinon l’import automatique détecte `USERS` et ne refait rien.

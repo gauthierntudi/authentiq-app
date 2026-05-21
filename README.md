@@ -41,7 +41,7 @@ php artisan migrate --force
 **Tout-en-un post-déploiement :**
 
 ```bash
-php artisan authentiq:deploy --force
+php artisan authentiq:deploy
 ```
 
 Voir **[DEPLOY-LARAVEL-CLOUD.md](DEPLOY-LARAVEL-CLOUD.md)** pour GitHub + Laravel Cloud (variables, queue, scheduler).
