@@ -445,9 +445,7 @@ class EncodageWorkflowApiController extends Controller
                 'nom_complet' => $encodage->client?->nom_complet,
                 'tel' => $encodage->client?->tel,
                 'email' => $encodage->client?->email,
-                'photo_url' => $encodage->client?->photo
-                    ? asset(ltrim(str_replace('../', '', $encodage->client->photo), '/'))
-                    : asset('assets/images/user.jpg'),
+                'photo_url' => $this->clientPhotos->photoUrl($encodage->client?->photo),
             ],
             'document' => [
                 'nom_doc' => $encodage->doc?->nom_doc,

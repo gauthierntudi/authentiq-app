@@ -7,7 +7,10 @@ use Illuminate\Http\UploadedFile;
 
 class ClientDuplicateGuard
 {
-    public function __construct(private RekognitionService $rekognition) {}
+    public function __construct(
+        private RekognitionService $rekognition,
+        private ClientPhotoStorage $clientPhotos,
+    ) {}
 
     /**
      * @return array{
@@ -106,16 +109,12 @@ class ClientDuplicateGuard
     {
         $client->loadMissing(['province', 'ville']);
 
-        $photoPath = $client->photo
-            ? ltrim(str_replace('../', '', $client->photo), '/')
-            : null;
-
         $data = [
             'id_client' => $client->id_client,
             'nom_complet' => $client->nom_complet,
             'tel' => $client->tel,
             'email' => $client->email,
-            'photo_url' => $photoPath ? asset($photoPath) : asset('assets/images/user.jpg'),
+            'photo_url' => $this->clientPhotos->photoUrl($client->photo),
             'is_active' => (int) $client->is_active,
             'type_piece_identite' => $client->type_piece_identite,
             'numero_national' => $client->numero_national,

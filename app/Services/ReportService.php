@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
+    public function __construct(private ClientPhotoStorage $clientPhotos) {}
     public function daily(User $user, ?string $date = null): array
     {
         $day = $this->parseDate($date) ?? today();
@@ -328,17 +329,11 @@ class ReportService
     private function recentRows(Builder $query, int $limit): array
     {
         return $query->limit($limit)->get()->map(function (Encodage $e) {
-            $clientPhoto = $e->client?->photo
-                ? ltrim(str_replace('../', '', $e->client->photo), '/')
-                : null;
-
             return [
                 'id_encodage' => $e->id_encodage,
                 'status' => $e->status,
                 'client_nom' => $e->client?->nom_complet,
-                'client_photo_url' => $clientPhoto
-                    ? asset($clientPhoto)
-                    : asset('assets/images/user.jpg'),
+                'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
                 'type_doc' => $e->doc?->nom_doc ?: $e->type_doc,
                 'agent_nom' => $e->user?->nom_complet,
                 'affectation' => $e->affectation ?: $e->commune?->nom,

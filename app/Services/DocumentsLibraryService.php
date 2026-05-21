@@ -10,7 +10,10 @@ use Illuminate\Support\Collection;
 
 class DocumentsLibraryService
 {
-    public function __construct(private DocumentStorage $storage) {}
+    public function __construct(
+        private DocumentStorage $storage,
+        private ClientPhotoStorage $clientPhotos,
+    ) {}
 
     /**
      * @return array{
@@ -102,14 +105,10 @@ class DocumentsLibraryService
                 }
             }
 
-            $photo = $client?->photo
-                ? ltrim(str_replace('../', '', $client->photo), '/')
-                : null;
-
             $folders[] = [
                 'id_client' => $idClient,
                 'nom_complet' => $client?->nom_complet ?: 'Sans client',
-                'photo_url' => $photo ? asset($photo) : asset('assets/images/user.jpg'),
+                'photo_url' => $this->clientPhotos->photoUrl($client?->photo),
                 'encodages_count' => $items->count(),
                 'pages_count' => $pagesCount,
                 'size_bytes' => $sizeBytes,
@@ -137,19 +136,13 @@ class DocumentsLibraryService
         $sizeBytes = (int) $pages->sum(fn (EncodagePage $p) => (int) ($p->file_size ?? 0));
         $pagesCount = (int) ($e->page_count ?? $pages->count());
 
-        $clientPhoto = $e->client?->photo
-            ? ltrim(str_replace('../', '', $e->client->photo), '/')
-            : null;
-
         $typeDoc = $e->doc?->nom_doc ?: $e->type_doc ?: 'Document';
 
         return [
             'id_encodage' => $e->id_encodage,
             'id_client' => (int) ($e->id_client ?? 0),
             'client_nom' => $e->client?->nom_complet ?: 'Sans client',
-            'client_photo_url' => $clientPhoto
-                ? asset($clientPhoto)
-                : asset('assets/images/user.jpg'),
+            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
             'type_doc' => $typeDoc,
             'status' => $e->status,
             'numero' => $e->numero,

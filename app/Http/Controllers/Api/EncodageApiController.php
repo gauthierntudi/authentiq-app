@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Encodage;
+use App\Services\ClientPhotoStorage;
+use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
 use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
@@ -12,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 class EncodageApiController extends Controller
 {
-    public function __construct(private DocumentStorage $storage) {}
+    public function __construct(
+        private DocumentStorage $storage,
+        private ClientPhotoStorage $clientPhotos,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -142,18 +147,12 @@ class EncodageApiController extends Controller
     {
         $typeDoc = $e->doc?->nom_doc ?: $e->type_doc;
 
-        $clientPhoto = $e->client?->photo
-            ? ltrim(str_replace('../', '', $e->client->photo), '/')
-            : null;
-
         return [
             'id_encodage' => $e->id_encodage,
             'status' => $e->status,
             'numero' => $e->numero,
             'client_nom' => $e->client?->nom_complet,
-            'client_photo_url' => $clientPhoto
-                ? asset($clientPhoto)
-                : asset('assets/images/user.jpg'),
+            'client_photo_url' => $this->clientPhotos->photoUrl($e->client?->photo),
             'type_doc' => $typeDoc,
             'nb_pages' => (int) ($e->page_count ?? 0),
             'affectation' => $e->affectation ?: $e->commune?->nom,

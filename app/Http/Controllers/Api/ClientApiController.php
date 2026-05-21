@@ -60,6 +60,7 @@ class ClientApiController extends Controller
                 'nom_ville' => $c->ville?->nom,
                 'active' => (int) $c->is_active,
                 'photo' => $c->photo ? ltrim(str_replace('../', '', $c->photo), '/') : null,
+                'photo_url' => $this->clientPhotos->photoUrl($c->photo),
             ]);
 
         return response()->json(['status' => 'success', 'data' => $clients]);
@@ -83,6 +84,7 @@ class ClientApiController extends Controller
                 'tel' => $client->tel,
                 'email' => $client->email,
                 'photo' => $client->photo,
+                'photo_url' => $this->clientPhotos->photoUrl($client->photo),
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,
                 'numero_passeport' => $client->numero_passeport,
@@ -302,10 +304,6 @@ class ClientApiController extends Controller
 
         $client = $result['client']->load(['province', 'ville']);
 
-        $photoPath = $client->photo
-            ? ltrim(str_replace('../', '', $client->photo), '/')
-            : null;
-
         return response()->json([
             'status' => 'success',
             'found' => true,
@@ -316,7 +314,7 @@ class ClientApiController extends Controller
                 'nom_complet' => $client->nom_complet,
                 'tel' => $client->tel,
                 'email' => $client->email,
-                'photo_url' => $photoPath ? asset($photoPath) : asset('assets/images/user.jpg'),
+                'photo_url' => $this->clientPhotos->photoUrl($client->photo),
                 'is_active' => (int) $client->is_active,
                 'type_piece_identite' => $client->type_piece_identite,
                 'numero_national' => $client->numero_national,

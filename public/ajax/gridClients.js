@@ -415,7 +415,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     tableContainer.innerHTML = '';
                     const mappedData = resp.data.map(c => [
                         c.id_client,
-                        c.photo || '',
+                        c.photo_url || c.photo || '',
                         c.nom_complet,
                         c.tel || '',
                         c.email || '',
@@ -640,7 +640,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Photo
                     const photoEl = document.getElementById('detailPhoto');
-                    if(photoEl) photoEl.src = client.photo || 'assets/images/user.jpg';
+                    if(photoEl) photoEl.src = client.photo_url || client.photo || 'assets/images/user.jpg';
                     
                     // Informations principales
                     const nomEl = document.getElementById('detailNom');
@@ -779,11 +779,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('clientNumPassport').value = client.numero_passeport || '';
                     }
                     resetClientPhotoState();
-                    if (client.photo) {
+                    if (client.photo_url || client.photo) {
                         clientEditHasPhoto = true;
-                        const photoUrl = client.photo.startsWith('http') || client.photo.startsWith('/')
-                            ? client.photo
-                            : (client.photo.startsWith('uploads/') ? client.photo : `uploads/${client.photo.replace(/^\//, '')}`);
+                        const photoUrl = client.photo_url
+                            || (client.photo.startsWith('http') || client.photo.startsWith('/')
+                                ? client.photo
+                                : (client.photo.startsWith('uploads/') ? client.photo : `uploads/${client.photo.replace(/^\//, '')}`));
                         setClientPhotoPreviewFromUrl(photoUrl);
                     }
                 }

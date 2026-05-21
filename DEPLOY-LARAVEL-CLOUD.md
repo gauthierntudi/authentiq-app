@@ -133,15 +133,35 @@ git push origin main
 
 Puis vérifie les logs de déploiement sur Laravel Cloud.
 
-## 9. Commandes manuelles (optionnel, console Cloud)
+## 9. Photos clients (S3)
+
+Les **documents scannés** utilisent déjà `AUTHENTIQ_DOCUMENTS_DISK=s3`. Les **photos clients** utilisent le **même disque** : nouvelles captures → S3 automatiquement.
+
+Les clients importés depuis Valet ont des chemins du type `uploads/clients/...` **sans fichier sur le serveur Cloud**. Après deploy :
+
+1. Vérifier sur Cloud : `AUTHENTIQ_DOCUMENTS_DISK=s3`, `AWS_BUCKET`, clés AWS.
+2. Depuis une machine qui a encore `public/uploads/clients/` (Valet), lancer une fois :
+   ```bash
+   php artisan authentiq:migrate-client-photos
+   ```
+   (Lit les fichiers locaux, les envoie sur S3, met à jour `CLIENTS.photo`.)
+
+   Dry-run : `php artisan authentiq:migrate-client-photos --dry-run`
+
+3. Réindexer Rekognition si besoin : `php artisan rekognition:index-clients`
+
+Sans migration, la grille clients affiche l’avatar par défaut ; les nouvelles photos prises sur Cloud fonctionnent.
+
+## 10. Commandes manuelles (optionnel, console Cloud)
 
 ```bash
 php artisan rekognition:index-clients
 php artisan textract:enqueue-missing --sync
+php artisan authentiq:migrate-client-photos
 php artisan migrate:status
 ```
 
-## 10. « Identifiants incorrects » après deploy
+## 11. « Identifiants incorrects » après deploy
 
 La base Cloud est **vide** ou mal connectée. Vérifiez :
 
@@ -163,7 +183,7 @@ Si `USERS` = 0 lignes :
 
 Vérifiez aussi que les variables `DB_*` sur Cloud pointent vers la **même** base que celle où vous avez importé le SQL.
 
-## 11. Mot de passe admin (Cloud ou local)
+## 12. Mot de passe admin (Cloud ou local)
 
 ```bash
 php artisan authentiq:reset-password email@example.com "NouveauMotDePasse" --admin

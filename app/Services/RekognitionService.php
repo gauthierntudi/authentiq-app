@@ -266,25 +266,7 @@ class RekognitionService
 
     public function readClientPhotoBytes(Client $client): ?string
     {
-        if (! $client->photo) {
-            return null;
-        }
-
-        $path = ltrim(str_replace(['../', '..\\'], '', $client->photo), '/');
-        $candidates = [
-            public_path($path),
-            public_path('uploads/clients/'.basename($path)),
-        ];
-
-        foreach ($candidates as $file) {
-            if (is_file($file)) {
-                $bytes = file_get_contents($file);
-
-                return $bytes !== false ? $bytes : null;
-            }
-        }
-
-        return null;
+        return app(ClientPhotoStorage::class)->readBytes($client->photo);
     }
 
     private function client(): RekognitionClient
