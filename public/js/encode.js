@@ -42,6 +42,8 @@ let clientAwaitingOtp = false;
 let pendingOtpGoNext = false;
 let otpClientIdForVerification = null;
 let encodageStatus = 'incomplete';
+/** Pages scannées modifiées localement sans repasser par OCR + sauvegarde serveur. */
+let scanPagesDirty = false;
 
 let newClientCameraStream = null;
 let encNewClientCroppedBlob = null;
@@ -110,12 +112,23 @@ function syncWizardEditability() {
     }
 }
 
+function markScanPagesDirty() {
+    scanPagesDirty = true;
+}
+
+function clearScanPagesDirty() {
+    scanPagesDirty = false;
+}
+
 function getStepBlockedMessage(step) {
     if (!encodageId) {
-        return 'Enregistrez d\'abord au moins une page scannée (étape 1).';
+        return 'Enregistrez d\'abord au moins une page scannée (étape 1 → Suivant).';
     }
     if (step === 2 && scannedPages.length === 0) {
         return 'Scannez au moins une page avant l\'étape OCR.';
+    }
+    if (scanPagesDirty) {
+        return 'Les pages scannées ont été modifiées. À l\'étape 1, cliquez « Suivant » pour relancer l\'OCR et enregistrer les pages.';
     }
 
     return 'Complétez les étapes précédentes avant de continuer.';
@@ -129,6 +142,9 @@ function canNavigateToStep(step) {
         return true;
     }
     if (!encodageId) {
+        return false;
+    }
+    if (scanPagesDirty && step >= 2) {
         return false;
     }
 
@@ -733,7 +749,9 @@ function applyServerPagesToScanned(pages) {
         image: p.file_path || '',
         blob: null,
         ocrText: p.ocr_text || '',
+        _isNewCapture: false,
     }));
+    clearScanPagesDirty();
     syncOcrTextFromPages();
     updateScanPagesUI();
 }
@@ -804,6 +822,7 @@ async function removeScannedPage(index) {
         }
     } else {
         scannedPages.splice(index, 1);
+        markScanPagesDirty();
         syncOcrTextFromPages();
         updateScanPagesUI();
         iziToast.success({ message: 'Page retirée.' });
@@ -947,7 +966,9 @@ function commitCurrentCaptureToScan(silent = false) {
                 blob,
                 image: canvas.toDataURL('image/jpeg', 0.95),
                 ocrText: '',
+                _isNewCapture: true,
             });
+            markScanPagesDirty();
             capturedImageBlob = null;
             updateScanPagesUI();
 
@@ -1325,6 +1346,14 @@ function recaptureImage() {
     });
 }
 
+function pageNeedsOcr(page) {
+    if (page._isNewCapture) {
+        return true;
+    }
+
+    return !page.ocrText || !String(page.ocrText).trim();
+}
+
 function processAllPagesOCR() {
     const ocrProgress = document.getElementById('ocrProgress');
     const ocrProgressText = document.getElementById('ocrProgressText');
@@ -1335,32 +1364,45 @@ function processAllPagesOCR() {
     
     let allText = '';
     let processedCount = 0;
+    const pagesNeedingOcr = scannedPages.filter(pageNeedsOcr).length;
+    const ocrDenom = Math.max(pagesNeedingOcr, 1);
     
     const processPage = (index) => {
         if (index >= scannedPages.length) {
             ocrTextArea.value = allText;
             ocrProgress.style.display = 'none';
-            iziToast.success({ message: `OCR terminé pour ${scannedPages.length} page(s)!` });
+            const msg = pagesNeedingOcr > 0
+                ? `OCR terminé pour ${pagesNeedingOcr} page(s).`
+                : 'Texte OCR existant conservé.';
+            iziToast.success({ message: msg });
             saveImageAndOCR();
             return;
         }
+
+        const page = scannedPages[index];
+        if (!pageNeedsOcr(page)) {
+            allText += `--- Page ${index + 1} ---\n${page.ocrText}\n\n`;
+            processPage(index + 1);
+            return;
+        }
         
-        Tesseract.recognize(scannedPages[index].image, 'fra+eng', {
+        Tesseract.recognize(page.image, 'fra+eng', {
             logger: info => {
                 if (info.status === 'recognizing text') {
-                    const pageProgress = (processedCount + info.progress) / scannedPages.length;
+                    const pageProgress = (processedCount + info.progress) / ocrDenom;
                     ocrProgressText.textContent = Math.round(pageProgress * 100) + '%';
                 }
             }
         }).then(({ data: { text } }) => {
-            // IMPORTANT : Sauvegarder le texte OCR pour cette page
             scannedPages[index].ocrText = text;
+            scannedPages[index]._isNewCapture = false;
             allText += `--- Page ${index + 1} ---\n${text}\n\n`;
             processedCount++;
             processPage(index + 1);
         }).catch(err => {
             console.error('Erreur OCR page', index + 1, err);
             scannedPages[index].ocrText = '';
+            scannedPages[index]._isNewCapture = false;
             processedCount++;
             processPage(index + 1);
         });
@@ -1369,7 +1411,69 @@ function processAllPagesOCR() {
     processPage(0);
 }
 
-function saveImageAndOCR() {
+async function blobFromPageImage(page) {
+    if (page.blob instanceof Blob && page.blob.size > 0) {
+        return page.blob;
+    }
+
+    const src = page.image;
+    if (!src) {
+        return null;
+    }
+
+    if (src.startsWith('data:')) {
+        const res = await fetch(src);
+
+        return res.ok ? res.blob() : null;
+    }
+
+    if (page.id_page && encodageId) {
+        const url = `${ENCODAGE_API}/${encodageId}/pages/${page.id_page}/file`;
+        const res = await fetch(url, { headers: encodeApiHeaders(), credentials: 'same-origin' });
+
+        return res.ok ? res.blob() : null;
+    }
+
+    try {
+        const res = await fetch(src, { credentials: 'same-origin' });
+
+        return res.ok ? res.blob() : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function ensurePageBlobsForUpload() {
+    for (const page of scannedPages) {
+        if (page.blob instanceof Blob && page.blob.size > 0) {
+            continue;
+        }
+        const blob = await blobFromPageImage(page);
+        if (blob) {
+            page.blob = blob;
+        }
+    }
+}
+
+async function saveImageAndOCR() {
+    try {
+        await ensurePageBlobsForUpload();
+    } catch (err) {
+        console.error('ensurePageBlobsForUpload:', err);
+        iziToast.error({ message: 'Impossible de préparer les fichiers des pages pour l\'envoi.' });
+
+        return;
+    }
+
+    const missing = scannedPages.filter((p) => !(p.blob instanceof Blob) || p.blob.size === 0);
+    if (missing.length > 0) {
+        iziToast.error({
+            message: `${missing.length} page(s) sans fichier image. Repassez par l\'étape scan (Suivant).`,
+        });
+
+        return;
+    }
+
     const formData = new FormData();
 
     scannedPages.forEach((page, index) => {
@@ -1392,11 +1496,14 @@ function saveImageAndOCR() {
             encodageId = data.encodageId;
             document.getElementById('encodageId').value = encodageId;
             setEncodageStatus('incomplete');
+            clearScanPagesDirty();
             if (Array.isArray(data.pages)) {
                 data.pages.forEach((p, i) => {
                     if (scannedPages[i]) {
                         scannedPages[i].id_page = p.id_page ?? null;
                         scannedPages[i].page_number = p.page_number ?? i + 1;
+                        scannedPages[i]._isNewCapture = false;
+                        scannedPages[i].blob = null;
                         if (p.file_path) {
                             scannedPages[i].image = p.file_path;
                         }
@@ -1408,7 +1515,7 @@ function saveImageAndOCR() {
                 syncOcrTextFromPages();
                 updateScanPagesUI();
             }
-            iziToast.success({ message: `${scannedPages.length} page(s) sauvegardée(s).` });
+            iziToast.success({ message: data.message || `${scannedPages.length} page(s) sauvegardée(s).` });
             if (data.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
                 pollTextractOcr(encodageId);
             }
@@ -2656,6 +2763,13 @@ function renderRecapitulatifHtml(data) {
     const pages = Array.isArray(data.pages) ? data.pages : [];
     const pageCount = data.pageCount ?? pages.length ?? scannedPages.length ?? 0;
     const isComplete = enc.status === 'complete';
+    const docMissing = !enc.id_doc && !doc.nom_doc;
+    const docMissingBanner = docMissing && !isComplete
+        ? `<div class="alert alert-warning enc-recap-doc-missing mb-3" role="alert">
+            <iconify-icon icon="solar:document-bold-duotone"></iconify-icon>
+            Type de document non enregistré — complétez l\'étape « Document » avant de finaliser.
+           </div>`
+        : '';
     const photoUrl = client.photo_url || 'assets/images/user.jpg';
     const tel = client.tel || '';
     const email = client.email || '';
@@ -2730,6 +2844,7 @@ function renderRecapitulatifHtml(data) {
 
     return `
         ${editActions}
+        ${docMissingBanner}
         <div class="enc-recap-bento">
             <div class="enc-recap-bento__row enc-recap-bento__row--top">
                 <article class="enc-recap-tile enc-recap-tile--profile">
@@ -3000,8 +3115,24 @@ function syncRecapFinalizeButton(data) {
         setEncodageStatus(data.encodage.status);
     }
 
-    const isComplete = data?.encodage?.status === 'complete';
-    submitBtn.disabled = isComplete;
+    const enc = data?.encodage || {};
+    const isComplete = enc.status === 'complete';
+    const pageCount = data?.pageCount ?? data?.pages?.length ?? 0;
+    const missingDoc = !enc.id_doc;
+    const missingClient = !enc.id_client;
+    const cannotFinalize = !isComplete && (missingDoc || missingClient || pageCount < 1 || scanPagesDirty);
+    submitBtn.disabled = isComplete || cannotFinalize;
+    if (cannotFinalize && !isComplete) {
+        submitBtn.title = scanPagesDirty
+            ? 'Pages modifiées : repassez par l\'étape scan (Suivant).'
+            : missingDoc
+                ? 'Enregistrez le type de document (étape 4).'
+                : missingClient
+                    ? 'Associez un client (étape 3).'
+                    : 'Au moins une page scannée requise.';
+    } else {
+        submitBtn.removeAttribute('title');
+    }
     const label = submitBtn.querySelector('.js-finalize-label');
     if (label) {
         label.textContent = isComplete ? 'Encodage finalisé' : 'Finaliser l\'encodage';

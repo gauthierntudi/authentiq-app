@@ -47,6 +47,8 @@ Route::middleware('web')->group(function () {
             Route::post('/delete-page', [EncodageWorkflowApiController::class, 'deletePage']);
             Route::get('/{id}/recap', [EncodageWorkflowApiController::class, 'recap'])->whereNumber('id');
             Route::get('/{id}/pages', [EncodageWorkflowApiController::class, 'pages'])->whereNumber('id');
+            Route::get('/{id}/pages/{pageId}/file', [EncodageWorkflowApiController::class, 'pageFile'])
+                ->whereNumber(['id', 'pageId']);
             Route::get('/{id}/resume', [EncodageWorkflowApiController::class, 'resume'])->whereNumber('id');
             Route::post('/{id}/finalize', [EncodageWorkflowApiController::class, 'finalize'])->whereNumber('id');
         });

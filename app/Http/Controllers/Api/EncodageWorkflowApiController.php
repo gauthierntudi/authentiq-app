@@ -19,7 +19,9 @@ use App\Services\TextractService;
 use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class EncodageWorkflowApiController extends Controller
 {
@@ -172,6 +174,13 @@ class EncodageWorkflowApiController extends Controller
 
                 if ($filePaths === []) {
                     throw new \RuntimeException('Aucun fichier uploadé avec succès.');
+                }
+
+                if (count($savedPages) < $pageCount) {
+                    throw new \RuntimeException(
+                        count($savedPages).' page(s) reçue(s) sur '.$pageCount.' attendue(s). '
+                        .'Reprenez l\'étape scan/OCR (Suivant) pour enregistrer toutes les pages.'
+                    );
                 }
 
                 Encodage::query()->where('id_encodage', $encodageId)->update([
@@ -544,6 +553,45 @@ class EncodageWorkflowApiController extends Controller
         return response()->json([
             'status' => 'success',
             'encodage' => $encodage,
+        ]);
+    }
+
+    public function pageFile(int $id, int $pageId): Response|JsonResponse
+    {
+        $user = $this->authUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        if (! $this->encodageForUser($id, $user)) {
+            return response()->json(['status' => 'error', 'message' => 'Encodage introuvable.'], 404);
+        }
+
+        $page = EncodagePage::query()
+            ->where('id_encodage', $id)
+            ->where('id_page', $pageId)
+            ->first();
+
+        if (! $page) {
+            return response()->json(['status' => 'error', 'message' => 'Page non trouvée.'], 404);
+        }
+
+        $bytes = $this->storage->diskGet($page->file_path);
+        if ($bytes === null || $bytes === '') {
+            return response()->json(['status' => 'error', 'message' => 'Fichier page introuvable.'], 404);
+        }
+
+        $ext = Str::lower(pathinfo($page->file_path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            default => 'image/jpeg',
+        };
+
+        return response($bytes, 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'private, max-age=300',
         ]);
     }
 
