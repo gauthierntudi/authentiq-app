@@ -3,6 +3,13 @@
 Base : `/api/mobile/client`  
 Authentification staff (agents) : session cookie — routes `/api/*` avec `auth.user` + `role.staff`.
 
+## Géographie (public, inscription)
+
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/geo/provinces` | Liste des provinces |
+| GET | `/geo/villes-by-province?id_province=1` | Villes d'une province |
+
 ## Inscription / connexion (public)
 
 | Méthode | Route | Description |

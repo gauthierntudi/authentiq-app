@@ -27,6 +27,9 @@ Route::middleware('web')->group(function () {
     | API mobile Flutter — clients finaux (Bearer token, pas de session staff).
     */
     Route::prefix('mobile/client')->group(function () {
+        Route::get('/geo/provinces', [GeoApiController::class, 'provinces']);
+        Route::get('/geo/villes-by-province', [GeoApiController::class, 'villesByProvince']);
+
         Route::post('/register', [MobileClientAuthApiController::class, 'register']);
         Route::post('/login', [MobileClientAuthApiController::class, 'login']);
         Route::post('/send-otp', [MobileClientAuthApiController::class, 'sendOtp']);
