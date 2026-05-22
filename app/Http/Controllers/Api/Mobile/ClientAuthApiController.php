@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Services\ClientAuthService;
 use App\Services\ClientDuplicateGuard;
+use App\Services\ClientPhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * API mobile Flutter — inscription et connexion client (sans interface web).
@@ -18,6 +20,7 @@ class ClientAuthApiController extends Controller
     public function __construct(
         private ClientAuthService $clientAuth,
         private ClientDuplicateGuard $duplicateGuard,
+        private ClientPhotoStorage $clientPhotos,
     ) {}
 
     /** Inscription autonome : crée le client (inactif) et envoie l'OTP. */
@@ -210,6 +213,26 @@ class ClientAuthApiController extends Controller
         ]);
     }
 
+    /** Photo du client connecté (Bearer token requis). */
+    public function photo(): Response
+    {
+        $client = \App\Support\CurrentClient::get();
+
+        if (! $client || ! $client->photo) {
+            return redirect($this->clientPhotos->defaultUrl());
+        }
+
+        $bytes = $this->clientPhotos->readBytes($client->photo);
+        if ($bytes === null || $bytes === '') {
+            return redirect($this->clientPhotos->defaultUrl());
+        }
+
+        return response($bytes, 200, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
     /** @return array<string, mixed> */
     private function clientPayload(Client $client): array
     {
@@ -224,6 +247,18 @@ class ClientAuthApiController extends Controller
             'nom_province' => $client->province?->nom,
             'nom_ville' => $client->ville?->nom,
             'mobile_registered_at' => $client->mobile_registered_at?->toIso8601String(),
+            'photo_url' => $this->mobilePhotoUrl($client),
         ];
+    }
+
+    private function mobilePhotoUrl(Client $client): ?string
+    {
+        if (! $client->photo) {
+            return null;
+        }
+
+        $v = $client->photoCacheVersion() ?? time();
+
+        return url('/api/mobile/client/me/photo').'?v='.$v;
     }
 }

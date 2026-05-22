@@ -31,6 +31,7 @@ Route::prefix('mobile/client')->group(function () {
 
     Route::middleware('auth.client')->group(function () {
         Route::get('/me', [MobileClientAuthApiController::class, 'me']);
+        Route::get('/me/photo', [MobileClientAuthApiController::class, 'photo']);
         Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
 
         Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
