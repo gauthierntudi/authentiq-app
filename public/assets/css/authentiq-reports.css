@@ -178,3 +178,46 @@
     line-height: 1.3;
     word-break: break-word;
 }
+
+.report-date-range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+.report-date-range .form-control {
+    min-width: 200px;
+    max-width: 220px;
+}
+.report-datepicker[readonly] {
+    cursor: pointer;
+    background-color: transparent !important;
+}
+.report-app .flatpickr-calendar {
+    background: #1e2230;
+    border: 1px solid #40465e;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.report-app .flatpickr-months .flatpickr-month,
+.report-app .flatpickr-current-month .flatpickr-monthDropdown-months,
+.report-app .flatpickr-current-month input.cur-year,
+.report-app .report-app .flatpickr-weekday,
+.report-app span.flatpickr-weekday {
+    color: #e8ecf4;
+}
+.report-app .flatpickr-day {
+    color: #c8cdd8;
+}
+.report-app .flatpickr-day:hover,
+.report-app .flatpickr-day:focus {
+    background: rgba(14, 237, 238, 0.2);
+    border-color: rgba(14, 237, 238, 0.35);
+}
+.report-app .flatpickr-day.today {
+    border-color: #0eedee;
+}
+.report-app .flatpickr-day.selected {
+    background: #0eedee;
+    border-color: #0eedee;
+    color: #12151f;
+}

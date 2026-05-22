@@ -13,6 +13,7 @@
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
     <link href="{{ asset('assets/css/authentiq-modals.css') }}" rel="stylesheet" type="text/css" />
     <link href="{{ asset('assets/css/authentiq-reports.css') }}" rel="stylesheet" type="text/css" />
+    <link href="assets/vendor/flatpickr/flatpickr.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
     <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>
@@ -36,7 +37,7 @@
     @include('layouts.partials.header-raw')
 
     <div class="page-content">
-        <div class="page-container" id="report-app" data-report-type="{{ $reportType }}">
+        <div class="page-container report-app" id="report-app" data-report-type="{{ $reportType }}">
 
             <div class="row mt-1">
                 <div class="col-12">
@@ -54,15 +55,16 @@
                     <div class="card border-radius">
                         <div class="card-body">
                             <div class="report-period-toolbar">
-                                @if ($reportType === 'daily')
-                                    <div>
-                                        <label class="form-label" for="reportDate">Date</label>
-                                        <input type="date" id="reportDate" class="form-control" style="max-width:220px;">
-                                    </div>
-                                @elseif ($reportType === 'monthly')
-                                    <div>
-                                        <label class="form-label" for="reportMonth">Mois</label>
-                                        <input type="month" id="reportMonth" class="form-control" style="max-width:220px;">
+                                @if ($reportType !== 'global')
+                                    <div class="report-date-range">
+                                        <div>
+                                            <label class="form-label" for="reportDateFrom">Date début</label>
+                                            <input type="text" id="reportDateFrom" class="form-control report-datepicker" placeholder="jj/mm/aaaa" autocomplete="off" readonly>
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="reportDateTo">Date fin</label>
+                                            <input type="text" id="reportDateTo" class="form-control report-datepicker" placeholder="jj/mm/aaaa" autocomplete="off" readonly>
+                                        </div>
                                     </div>
                                 @endif
                                 <div class="ms-auto">
@@ -77,13 +79,11 @@
 
                             <div class="report-charts-row">
                                 <div class="report-panel">
-                                    <div class="report-panel__title">
-                                        @if ($reportType === 'daily')
-                                            Encodages par heure
-                                        @elseif ($reportType === 'monthly')
-                                            Encodages par jour
-                                        @else
+                                    <div class="report-panel__title" id="reportChartTitle">
+                                        @if ($reportType === 'global')
                                             Évolution mensuelle
+                                        @else
+                                            Activité sur la période
                                         @endif
                                     </div>
                                     <div id="reportChartMain" class="report-chart"></div>
@@ -133,8 +133,10 @@
 
 <script src="assets/js/vendor.min.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/vendor/flatpickr/flatpickr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script>
 <script src="assets/vendor/gridjs/gridjs.umd.js"></script>
 <script src="assets/vendor/apexcharts/apexcharts.min.js"></script>
-<script src="{{ asset('ajax/reports.js') }}"></script>
+<script src="{{ asset('ajax/reports.js') }}?v={{ @filemtime(public_path('ajax/reports.js')) }}"></script>
 </body>
 </html>

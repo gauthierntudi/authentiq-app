@@ -19,9 +19,11 @@ class ReportApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
         }
 
+        [$from, $to] = $this->resolveRangeQuery($request);
+
         return response()->json([
             'status' => 'success',
-            'data' => $this->reports->daily($user, $request->query('date')),
+            'data' => $this->reports->daily($user, $request->query('date'), $from, $to),
         ]);
     }
 
@@ -32,10 +34,31 @@ class ReportApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
         }
 
+        [$from, $to] = $this->resolveRangeQuery($request);
+
         return response()->json([
             'status' => 'success',
-            'data' => $this->reports->monthly($user, $request->query('month')),
+            'data' => $this->reports->monthly($user, $request->query('month'), $from, $to),
         ]);
+    }
+
+    /** @return array{0: ?string, 1: ?string} */
+    private function resolveRangeQuery(Request $request): array
+    {
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        if ($from || $to) {
+            return [$from, $to];
+        }
+
+        if ($request->query('date')) {
+            $d = (string) $request->query('date');
+
+            return [$d, $d];
+        }
+
+        return [null, null];
     }
 
     public function global(): JsonResponse

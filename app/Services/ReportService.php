@@ -13,71 +13,76 @@ use Illuminate\Support\Facades\DB;
 class ReportService
 {
     public function __construct(private ClientPhotoStorage $clientPhotos) {}
-    public function daily(User $user, ?string $date = null): array
+    public function daily(User $user, ?string $date = null, ?string $from = null, ?string $to = null): array
     {
+        if ($from !== null || $to !== null) {
+            return $this->forPeriod($user, $from, $to, 'daily');
+        }
+
         $day = $this->parseDate($date) ?? today();
-        $from = $day->copy()->startOfDay();
-        $to = $day->copy()->endOfDay();
 
-        $encodages = $this->encodageQuery($user)
-            ->whereBetween('created_at', [$from, $to])
-            ->with(['client', 'doc', 'user', 'commune']);
-
-        $finalizedToday = $this->encodageQuery($user)
-            ->where('status', 'complete')
-            ->whereBetween('updated_at', [$from, $to]);
-
-        $summary = $this->buildSummary($encodages->clone(), $finalizedToday->clone());
-        $summary['finalized_today'] = (int) $finalizedToday->count();
-
-        return [
-            'period' => [
-                'type' => 'daily',
-                'label' => $day->locale('fr')->isoFormat('dddd D MMMM YYYY'),
-                'from' => $from->toDateString(),
-                'to' => $to->toDateString(),
-            ],
-            'summary' => $summary,
-            'timeline' => $this->hourlyTimeline($encodages->clone()),
-            'by_agent' => $this->byAgent($encodages->clone(), $user),
-            'by_doc_type' => $this->byDocType($encodages->clone()),
-            'by_commune' => $this->byCommune($encodages->clone()),
-            'recent_encodages' => $this->recentRows($encodages->clone()->orderByDesc('created_at'), 15),
-            'clients_new' => $this->clientsInPeriod($from, $to),
-        ];
+        return $this->forPeriod($user, $day->toDateString(), $day->toDateString(), 'daily');
     }
 
-    public function monthly(User $user, ?string $month = null): array
+    public function monthly(User $user, ?string $month = null, ?string $from = null, ?string $to = null): array
     {
+        if ($from !== null || $to !== null) {
+            return $this->forPeriod($user, $from, $to, 'monthly');
+        }
+
         $start = $this->parseMonth($month) ?? now()->startOfMonth();
-        $from = $start->copy()->startOfMonth();
-        $to = $start->copy()->endOfMonth();
+
+        return $this->forPeriod(
+            $user,
+            $start->copy()->startOfMonth()->toDateString(),
+            $start->copy()->endOfMonth()->toDateString(),
+            'monthly',
+        );
+    }
+
+    public function forPeriod(User $user, ?string $from, ?string $to, string $reportType = 'daily'): array
+    {
+        [$fromDay, $toDay] = $this->resolvePeriodBounds($from, $to);
+
+        $rangeStart = $fromDay->copy()->startOfDay();
+        $rangeEnd = $toDay->copy()->endOfDay();
 
         $encodages = $this->encodageQuery($user)
-            ->whereBetween('created_at', [$from, $to])
+            ->whereBetween('created_at', [$rangeStart, $rangeEnd])
             ->with(['client', 'doc', 'user', 'commune']);
 
-        $finalizedInMonth = $this->encodageQuery($user)
+        $finalizedInPeriod = $this->encodageQuery($user)
             ->where('status', 'complete')
-            ->whereBetween('updated_at', [$from, $to]);
+            ->whereBetween('updated_at', [$rangeStart, $rangeEnd]);
 
-        $summary = $this->buildSummary($encodages->clone(), $finalizedInMonth->clone());
-        $summary['finalized_in_period'] = (int) $finalizedInMonth->count();
+        $summary = $this->buildSummary($encodages->clone(), $finalizedInPeriod->clone());
+        $summary['finalized_in_period'] = (int) $finalizedInPeriod->count();
+        if ($fromDay->isSameDay($toDay)) {
+            $summary['finalized_today'] = $summary['finalized_in_period'];
+        }
+
+        $isSingleDay = $fromDay->isSameDay($toDay);
+        $timeline = $isSingleDay
+            ? $this->hourlyTimeline($encodages->clone())
+            : $this->dailyTimeline($encodages->clone(), $fromDay, $toDay);
+
+        $recentLimit = $reportType === 'monthly' ? 50 : 30;
 
         return [
             'period' => [
-                'type' => 'monthly',
-                'label' => $from->locale('fr')->isoFormat('MMMM YYYY'),
-                'from' => $from->toDateString(),
-                'to' => $to->toDateString(),
+                'type' => $reportType,
+                'label' => $this->periodLabel($fromDay, $toDay),
+                'from' => $fromDay->toDateString(),
+                'to' => $toDay->toDateString(),
+                'single_day' => $isSingleDay,
             ],
             'summary' => $summary,
-            'timeline' => $this->dailyTimeline($encodages->clone(), $from, $to),
+            'timeline' => $timeline,
             'by_agent' => $this->byAgent($encodages->clone(), $user),
             'by_doc_type' => $this->byDocType($encodages->clone()),
             'by_commune' => $this->byCommune($encodages->clone()),
-            'recent_encodages' => $this->recentRows($encodages->clone()->orderByDesc('created_at'), 20),
-            'clients_new' => $this->clientsInPeriod($from, $to),
+            'recent_encodages' => $this->recentRows($encodages->clone()->orderByDesc('created_at'), $recentLimit),
+            'clients_new' => $this->clientsInPeriod($rangeStart, $rangeEnd),
         ];
     }
 
@@ -180,17 +185,18 @@ class ReportService
     private function dailyTimeline(Builder $query, Carbon $from, Carbon $to): array
     {
         $counts = (clone $query)
-            ->selectRaw('DAY(created_at) as bucket, COUNT(*) as total')
+            ->selectRaw('DATE(created_at) as bucket, COUNT(*) as total')
             ->groupBy('bucket')
             ->pluck('total', 'bucket');
 
         $timeline = [];
-        $cursor = $from->copy();
-        while ($cursor->lte($to)) {
-            $day = (int) $cursor->day;
+        $cursor = $from->copy()->startOfDay();
+        $end = $to->copy()->startOfDay();
+        while ($cursor->lte($end)) {
+            $key = $cursor->toDateString();
             $timeline[] = [
                 'label' => $cursor->format('d/m'),
-                'value' => (int) ($counts[$day] ?? 0),
+                'value' => (int) ($counts[$key] ?? 0),
             ];
             $cursor->addDay();
         }
@@ -353,6 +359,30 @@ class ReportService
         return (int) Client::query()
             ->whereBetween('created_at', [$from, $to])
             ->count();
+    }
+
+    /** @return array{0: Carbon, 1: Carbon} */
+    private function resolvePeriodBounds(?string $from, ?string $to): array
+    {
+        $fromDay = $this->parseDate($from) ?? today();
+        $toDay = $this->parseDate($to) ?? $fromDay->copy();
+
+        if ($fromDay->gt($toDay)) {
+            return [$toDay->copy(), $fromDay->copy()];
+        }
+
+        return [$fromDay, $toDay];
+    }
+
+    private function periodLabel(Carbon $from, Carbon $to): string
+    {
+        if ($from->isSameDay($to)) {
+            return $from->locale('fr')->isoFormat('dddd D MMMM YYYY');
+        }
+
+        return $from->locale('fr')->isoFormat('D MMM YYYY')
+            .' – '
+            .$to->locale('fr')->isoFormat('D MMM YYYY');
     }
 
     private function parseDate(?string $date): ?Carbon

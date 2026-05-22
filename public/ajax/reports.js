@@ -3,10 +3,11 @@
     if (!root) return;
 
     const type = root.dataset.reportType || 'daily';
-    const dateInput = document.getElementById('reportDate');
-    const monthInput = document.getElementById('reportMonth');
+    const dateFromEl = document.getElementById('reportDateFrom');
+    const dateToEl = document.getElementById('reportDateTo');
     const btnRefresh = document.getElementById('btnReportRefresh');
     const periodLabel = document.getElementById('reportPeriodLabel');
+    const chartTitleEl = document.getElementById('reportChartTitle');
     const statsEl = document.getElementById('reportStats');
     const chartMainEl = document.getElementById('reportChartMain');
     const breakdownAgent = document.getElementById('reportBreakdownAgent');
@@ -17,6 +18,9 @@
 
     let chartMain = null;
     let recentGrid = null;
+    let fpFrom = null;
+    let fpTo = null;
+    let pickerChangeEnabled = false;
 
     const endpoints = {
         daily: '/api/reports/daily',
@@ -24,15 +28,36 @@
         global: '/api/reports/global',
     };
 
+    function toYmd(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function parseYmd(str) {
+        if (!str || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
+        const [y, m, d] = str.split('-').map(Number);
+        const dt = new Date(y, m - 1, d);
+        return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+
+    function getRangeFromPickers() {
+        const from = fpFrom?.selectedDates[0] || parseYmd(dateFromEl?.dataset.value);
+        const to = fpTo?.selectedDates[0] || parseYmd(dateToEl?.dataset.value);
+        return { from, to };
+    }
+
     function apiUrl() {
         const base = endpoints[type] || endpoints.daily;
         const url = new URL(base, window.location.origin);
-        if (type === 'daily' && dateInput?.value) {
-            url.searchParams.set('date', dateInput.value);
+
+        if (type !== 'global') {
+            const { from, to } = getRangeFromPickers();
+            if (from) url.searchParams.set('from', toYmd(from));
+            if (to) url.searchParams.set('to', toYmd(to));
         }
-        if (type === 'monthly' && monthInput?.value) {
-            url.searchParams.set('month', monthInput.value);
-        }
+
         return url.toString();
     }
 
@@ -50,7 +75,7 @@
 
     function renderStats(data) {
         const s = data.summary || {};
-        const extraFinalized = s.finalized_today ?? s.finalized_in_period;
+        const extraFinalized = s.finalized_in_period ?? s.finalized_today;
         const finalizedHint = extraFinalized != null
             ? `${extraFinalized} finalisé(s) sur la période`
             : null;
@@ -95,6 +120,15 @@
         }).join('');
     }
 
+    function updateChartTitle(period) {
+        if (!chartTitleEl || type === 'global') return;
+        if (period?.single_day) {
+            chartTitleEl.textContent = 'Encodages par heure';
+        } else {
+            chartTitleEl.textContent = 'Encodages par jour';
+        }
+    }
+
     function renderChart(timeline) {
         if (!chartMainEl || typeof ApexCharts === 'undefined') return;
         const labels = (timeline || []).map((t) => t.label);
@@ -126,7 +160,10 @@
             },
             xaxis: {
                 categories: labels,
-                labels: { style: { colors: '#8b93a8' } },
+                labels: {
+                    style: { colors: '#8b93a8' },
+                    rotate: labels.length > 14 ? -45 : 0,
+                },
             },
             yaxis: {
                 labels: { style: { colors: '#8b93a8' } },
@@ -240,6 +277,22 @@
     }
 
     async function loadReport() {
+        if (type !== 'global') {
+            const { from, to } = getRangeFromPickers();
+            if (!from || !to) {
+                if (window.iziToast) {
+                    iziToast.warning({ title: 'Rapport', message: 'Choisissez une date de début et une date de fin.' });
+                }
+                return;
+            }
+            if (from > to) {
+                if (window.iziToast) {
+                    iziToast.warning({ title: 'Rapport', message: 'La date de début doit être avant la date de fin.' });
+                }
+                return;
+            }
+        }
+
         statsEl.innerHTML = '<div class="report-loading col-12">Chargement…</div>';
         try {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -258,6 +311,7 @@
             if (periodLabel && data.period?.label) {
                 periodLabel.textContent = data.period.label;
             }
+            updateChartTitle(data.period);
             renderStats(data);
             renderChart(data.timeline);
             renderBreakdown(breakdownAgent, data.by_agent, true);
@@ -275,17 +329,70 @@
         }
     }
 
-    if (dateInput && !dateInput.value) {
-        dateInput.value = new Date().toISOString().slice(0, 10);
-    }
-    if (monthInput && !monthInput.value) {
-        const d = new Date();
-        monthInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    function initDatePickers() {
+        if (type === 'global' || typeof flatpickr === 'undefined') {
+            return;
+        }
+
+        root.classList.add('report-app');
+
+        const locale = flatpickr.l10ns?.fr || undefined;
+        const today = new Date();
+        let defaultFrom = new Date(today);
+        let defaultTo = new Date(today);
+
+        if (type === 'monthly') {
+            defaultFrom = new Date(today.getFullYear(), today.getMonth(), 1);
+            defaultTo = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        }
+
+        const commonOpts = {
+            locale,
+            dateFormat: 'Y-m-d',
+            altInput: true,
+            altFormat: 'd/m/Y',
+            allowInput: false,
+            disableMobile: true,
+        };
+
+        if (dateFromEl) {
+            fpFrom = flatpickr(dateFromEl, {
+                ...commonOpts,
+                defaultDate: defaultFrom,
+                maxDate: defaultTo,
+                onChange(selectedDates) {
+                    if (fpTo && selectedDates[0]) {
+                        fpTo.set('minDate', selectedDates[0]);
+                    }
+                    if (pickerChangeEnabled) {
+                        loadReport();
+                    }
+                },
+            });
+            dateFromEl.dataset.value = toYmd(defaultFrom);
+        }
+
+        if (dateToEl) {
+            fpTo = flatpickr(dateToEl, {
+                ...commonOpts,
+                defaultDate: defaultTo,
+                minDate: defaultFrom,
+                onChange(selectedDates) {
+                    if (fpFrom && selectedDates[0]) {
+                        fpFrom.set('maxDate', selectedDates[0]);
+                    }
+                    if (pickerChangeEnabled) {
+                        loadReport();
+                    }
+                },
+            });
+            dateToEl.dataset.value = toYmd(defaultTo);
+        }
     }
 
     btnRefresh?.addEventListener('click', loadReport);
-    dateInput?.addEventListener('change', loadReport);
-    monthInput?.addEventListener('change', loadReport);
 
+    initDatePickers();
+    pickerChangeEnabled = true;
     loadReport();
 })();
