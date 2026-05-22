@@ -17,36 +17,36 @@ use App\Http\Controllers\Api\UserApiController;
 use App\Http\Controllers\Api\VilleApiController;
 use Illuminate\Support\Facades\Route;
 
+/*
+| API mobile Flutter — Bearer token, sans session ni CSRF (ne pas mettre dans « web »).
+*/
+Route::prefix('mobile/client')->group(function () {
+    Route::get('/geo/provinces', [GeoApiController::class, 'provinces']);
+    Route::get('/geo/villes-by-province', [GeoApiController::class, 'villesByProvince']);
+
+    Route::post('/register', [MobileClientAuthApiController::class, 'register']);
+    Route::post('/login', [MobileClientAuthApiController::class, 'login']);
+    Route::post('/send-otp', [MobileClientAuthApiController::class, 'sendOtp']);
+    Route::post('/verify-otp', [MobileClientAuthApiController::class, 'verifyOtp']);
+
+    Route::middleware('auth.client')->group(function () {
+        Route::get('/me', [MobileClientAuthApiController::class, 'me']);
+        Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
+
+        Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
+        Route::post('/documents/verify', [MobileClientDocumentApiController::class, 'verify']);
+        Route::get('/documents/verify-grants', [MobileClientDocumentApiController::class, 'listGrants']);
+        Route::post('/documents/verify-grants', [MobileClientDocumentApiController::class, 'grant']);
+        Route::delete('/documents/verify-grants/{grantId}', [MobileClientDocumentApiController::class, 'revokeGrant'])
+            ->whereNumber('grantId');
+    });
+});
+
 Route::middleware('web')->group(function () {
     Route::post('/auth/login', [AuthApiController::class, 'login']);
     Route::post('/auth/send-otp', [AuthApiController::class, 'sendLoginOtp']);
     Route::post('/auth/verify-otp', [AuthApiController::class, 'verifyOtp']);
     Route::post('/auth/resend-otp', [AuthApiController::class, 'resendOtp']);
-
-    /*
-    | API mobile Flutter — clients finaux (Bearer token, pas de session staff).
-    */
-    Route::prefix('mobile/client')->group(function () {
-        Route::get('/geo/provinces', [GeoApiController::class, 'provinces']);
-        Route::get('/geo/villes-by-province', [GeoApiController::class, 'villesByProvince']);
-
-        Route::post('/register', [MobileClientAuthApiController::class, 'register']);
-        Route::post('/login', [MobileClientAuthApiController::class, 'login']);
-        Route::post('/send-otp', [MobileClientAuthApiController::class, 'sendOtp']);
-        Route::post('/verify-otp', [MobileClientAuthApiController::class, 'verifyOtp']);
-
-        Route::middleware('auth.client')->group(function () {
-            Route::get('/me', [MobileClientAuthApiController::class, 'me']);
-            Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
-
-            Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
-            Route::post('/documents/verify', [MobileClientDocumentApiController::class, 'verify']);
-            Route::get('/documents/verify-grants', [MobileClientDocumentApiController::class, 'listGrants']);
-            Route::post('/documents/verify-grants', [MobileClientDocumentApiController::class, 'grant']);
-            Route::delete('/documents/verify-grants/{grantId}', [MobileClientDocumentApiController::class, 'revokeGrant'])
-                ->whereNumber('grantId');
-        });
-    });
 
     Route::middleware(['auth.user', 'role.staff'])->group(function () {
         Route::get('/profile', [ProfileApiController::class, 'show']);

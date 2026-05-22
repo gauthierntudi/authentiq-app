@@ -19,6 +19,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'role.admin' => \App\Http\Middleware\EnsureAdmin::class,
             'role.staff' => \App\Http\Middleware\EnsureStaff::class,
         ]);
+
+        // Filet de sécurité si une route mobile repasse sous « web »
+        $middleware->validateCsrfTokens(except: [
+            'api/mobile/client',
+            'api/mobile/client/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
