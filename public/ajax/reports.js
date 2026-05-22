@@ -222,15 +222,16 @@
                 name: r.client_nom || '—',
             });
 
+            // Chaque index = la colonne GridJS correspondante (les formatters n’ajustent pas l’alignement).
             return [
                 r.id_encodage,
-                r.status || 'incomplete',
                 r.client_nom || '—',
                 r.type_doc || '—',
                 r.agent_nom || '—',
                 r.affectation || '—',
                 r.montant != null ? fmtMoney(r.montant) : '—',
                 r.nb_pages ?? 0,
+                r.status || 'incomplete',
                 r.date || '—',
             ];
         });
@@ -244,7 +245,7 @@
                 formatter: (_, row) => {
                     const id = row.cells[0].data;
                     const meta = rowMetaById.get(id) || {};
-                    return clientCellHtml(meta.photo, meta.name || row.cells[2].data);
+                    return clientCellHtml(meta.photo, meta.name || row.cells[1].data);
                 },
             },
             { name: 'Document', width: '140px' },
@@ -255,7 +256,7 @@
             {
                 name: 'Statut',
                 width: '100px',
-                formatter: (_, row) => statusBadgeHtml(row.cells[1].data),
+                formatter: (_, row) => statusBadgeHtml(row.cells[7].data),
             },
             { name: 'Date', width: '130px' },
         ];
