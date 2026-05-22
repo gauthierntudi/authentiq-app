@@ -97,40 +97,23 @@ document.addEventListener('DOMContentLoaded', function() {
     loadCommunes();
 
     // Supprimer commune
-    window.deleteCommune = function(id) {
-        iziToast.question({
-            timeout: 20000,
-            close: true,
-            overlay: true,
-            displayMode: 'once',
-            backgroundColor: '#3d4153',
-            id: 'question',
-            zindex: 9999,
-            title: 'Confirmation',
-            message: 'Voulez-vous vraiment supprimer cette commune ?',
-            position: 'center',
-            theme: 'dark',
-            buttons: [
-                ['<button>Oui</button>', function (instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                    fetch(`/api/communes/${id}`, {
-                        method: 'DELETE',
-                        headers: apiHeaders()
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if(data.status === 'success') {
-                            iziToast.success({ title: 'Supprimé', message: data.message });
-                            loadCommunes();
-                        } else {
-                            iziToast.error({ title: 'Erreur', message: data.message });
-                        }
-                    });
-                }, true],
-                ['<button>Non</button>', function (instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                }]
-            ]
+    window.deleteCommune = async function(id) {
+        await AuthentiqConfirm.whenConfirmed({
+            title: 'Supprimer la commune',
+            text: 'Voulez-vous vraiment supprimer cette commune ?',
+            danger: true,
+        }, async () => {
+            const res = await fetch(`/api/communes/${id}`, {
+                method: 'DELETE',
+                headers: apiHeaders(),
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                iziToast.success({ title: 'Supprimé', message: data.message });
+                loadCommunes();
+            } else {
+                iziToast.error({ title: 'Erreur', message: data.message });
+            }
         });
     };
 

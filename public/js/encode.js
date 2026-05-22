@@ -948,7 +948,11 @@ async function removeScannedPage(index) {
     }
 
     const label = page.page_number ? `page ${page.page_number}` : `page ${index + 1}`;
-    if (!window.confirm(`Supprimer la ${label} ? Cette action est définitive.`)) {
+    const okDelete = await AuthentiqConfirm.danger({
+        title: 'Supprimer la page',
+        text: `Supprimer la ${label} ? Cette action est définitive.`,
+    });
+    if (!okDelete) {
         return;
     }
 
@@ -981,7 +985,11 @@ async function removeScannedPageById(idPage) {
         return;
     }
 
-    if (!window.confirm('Supprimer cette page scannée ?')) {
+    const okDelete = await AuthentiqConfirm.danger({
+        title: 'Supprimer la page',
+        text: 'Supprimer cette page scannée ? Cette action est définitive.',
+    });
+    if (!okDelete) {
         return;
     }
 

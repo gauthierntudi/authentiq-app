@@ -1,0 +1,89 @@
+/**
+ * SweetAlert2 — thème Authentiq (dark, aligné modals / iziToast)
+ */
+.swal2-container {
+    z-index: 20000 !important;
+}
+
+.swal2-container.swal2-backdrop-show,
+.swal2-container.swal2-noanimation {
+    background: rgba(0, 0, 0, 0.82) !important;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+
+.authentiq-swal-popup {
+    background: #161a26 !important;
+    border: 1px solid rgba(64, 70, 94, 0.55) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45) !important;
+    padding: 1.5rem 1.25rem 1.25rem !important;
+    color: #e8eaef !important;
+    font-family: inherit !important;
+}
+
+.authentiq-swal-title {
+    color: #f3f4f6 !important;
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+}
+
+.authentiq-swal-body {
+    color: #9ca3af !important;
+    font-size: 0.92rem !important;
+    line-height: 1.55 !important;
+}
+
+.authentiq-swal-icon {
+    border-color: rgba(107, 135, 252, 0.35) !important;
+    color: #6b87fc !important;
+}
+
+.authentiq-swal-popup .swal2-icon.swal2-warning {
+    border-color: rgba(251, 191, 36, 0.45) !important;
+    color: #fbbf24 !important;
+}
+
+.authentiq-swal-popup .swal2-icon.swal2-error {
+    border-color: rgba(248, 113, 113, 0.45) !important;
+}
+
+.authentiq-swal-actions {
+    gap: 0.65rem !important;
+    margin-top: 1.25rem !important;
+}
+
+.authentiq-swal-btn {
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    padding: 0.55rem 1.35rem !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.authentiq-swal-btn--confirm {
+    background: #4766e7 !important;
+    color: #fff !important;
+}
+
+.authentiq-swal-btn--confirm:hover {
+    background: #5a78eb !important;
+}
+
+.authentiq-swal-btn--confirm.authentiq-swal-btn--danger {
+    background: #dc3545 !important;
+}
+
+.authentiq-swal-btn--confirm.authentiq-swal-btn--danger:hover {
+    background: #e04b59 !important;
+}
+
+.authentiq-swal-btn--cancel {
+    background: #40465e !important;
+    color: #e8eaef !important;
+}
+
+.authentiq-swal-btn--cancel:hover {
+    background: #4a5168 !important;
+}

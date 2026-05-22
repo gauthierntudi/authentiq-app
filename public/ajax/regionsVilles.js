@@ -110,49 +110,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     btnAddVille?.addEventListener('click', openAddModal);
 
-    window.deleteVille = function(id) {
-        iziToast.question({
-            timeout: 20000,
-            close: true,
-            overlay: true,
-            displayMode: 'once',
-            backgroundColor: '#3d4153',
-            id: 'question',
-            zindex: 9999,
-            title: 'Confirmation',
-            message: 'Voulez-vous vraiment supprimer cette ville ?',
-            position: 'bottomCenter',
-            theme: 'dark',
-            buttons: [
-                ['<button>Oui</button>', function(instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                    fetch(`/api/villes/${id}`, { method: 'DELETE', headers: apiHeaders() })
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                iziToast.success({
-                                    backgroundColor: '#3d4153',
-                                    title: 'Supprimé',
-                                    message: data.message,
-                                    position: 'bottomCenter',
-                                    theme: 'dark',
-                                });
-                                loadVilles();
-                            } else {
-                                iziToast.error({
-                                    backgroundColor: '#3d4153',
-                                    title: 'Erreur',
-                                    message: data.message,
-                                    position: 'bottomCenter',
-                                    theme: 'dark',
-                                });
-                            }
-                        });
-                }, true],
-                ['<button>Non</button>', function(instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                }],
-            ],
+    window.deleteVille = async function(id) {
+        await AuthentiqConfirm.whenConfirmed({
+            title: 'Supprimer la ville',
+            text: 'Voulez-vous vraiment supprimer cette ville ?',
+            danger: true,
+        }, async () => {
+            const res = await fetch(`/api/villes/${id}`, { method: 'DELETE', headers: apiHeaders() });
+            const data = await res.json();
+            if (data.status === 'success') {
+                iziToast.success({ title: 'Supprimé', message: data.message });
+                loadVilles();
+            } else {
+                iziToast.error({ title: 'Erreur', message: data.message });
+            }
         });
     };
 

@@ -1,5 +1,6 @@
 <link href="{{ asset('assets/css/authentiq-modals.css') }}" rel="stylesheet" type="text/css">
 <link href="{{ asset('assets/css/authentiq-fab.css') }}" rel="stylesheet" type="text/css">
+@include('layouts.partials.authentiq-confirm')
 <style>
     .side-nav-link:hover iconify-icon {
         color: #6b87fc;

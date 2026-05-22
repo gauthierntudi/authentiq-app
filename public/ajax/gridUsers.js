@@ -430,27 +430,20 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     // --- Delete user ---
-    window.deleteUser = function(id){
-        iziToast.question({
-            timeout:20000, close:true, overlay:true, displayMode:'once',
-            id:'question-user', zindex:9999,backgroundColor: '#3d4153',
-            title:'Confirmation', message:'Voulez-vous vraiment supprimer cet utilisateur ?',
-            position:'center', theme:'dark',
-            buttons:[
-                ['<button>Oui</button>', function(instance, toast){
-                    instance.hide({transitionOut:'fadeOut'}, toast,'button');
-                    fetch(`/api/users/${id}`,{method:'DELETE', headers: apiHeaders()})
-                        .then(r=>r.json()).then(data=>{
-                            if(data.status==='success'){ 
-                                iziToast.success({title:'Supprimé', message:data.message}); 
-                                loadUsers(); 
-                            } else iziToast.error({title:'Erreur', message:data.message});
-                        });
-                }, true],
-                ['<button>Non</button>', function(instance, toast){
-                    instance.hide({transitionOut:'fadeOut'}, toast,'button');
-                }]
-            ]
+    window.deleteUser = async function(id){
+        await AuthentiqConfirm.whenConfirmed({
+            title: 'Supprimer l\'utilisateur',
+            text: 'Voulez-vous vraiment supprimer cet utilisateur ?',
+            danger: true,
+        }, async () => {
+            const r = await fetch(`/api/users/${id}`, { method: 'DELETE', headers: apiHeaders() });
+            const data = await r.json();
+            if (data.status === 'success') {
+                iziToast.success({ title: 'Supprimé', message: data.message });
+                loadUsers();
+            } else {
+                iziToast.error({ title: 'Erreur', message: data.message });
+            }
         });
     };
 

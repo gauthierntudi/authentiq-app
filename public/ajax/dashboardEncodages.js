@@ -229,35 +229,20 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    window.deleteEncodage = function(id) {
-        iziToast.question({
-            timeout: 20000,
-            close: true,
-            overlay: true,
-            displayMode: 'once',
-            backgroundColor: '#3d4153',
-            title: 'Confirmation',
-            message: 'Supprimer cet encodage ? Cette action est irréversible.',
-            position: 'bottomCenter',
-            theme: 'dark',
-            buttons: [
-                ['<button>Oui</button>', function(instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                    fetch(`/api/encodages/${id}`, { method: 'DELETE', headers: apiHeaders() })
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                iziToast.success({ title: 'Supprimé', message: data.message });
-                                loadEncodages();
-                            } else {
-                                iziToast.error({ title: 'Erreur', message: data.message });
-                            }
-                        });
-                }, true],
-                ['<button>Non</button>', function(instance, toast) {
-                    instance.hide({ transitionOut: 'fadeOut' }, toast, 'button');
-                }],
-            ],
+    window.deleteEncodage = async function(id) {
+        await AuthentiqConfirm.whenConfirmed({
+            title: 'Supprimer l\'encodage',
+            text: 'Supprimer cet encodage ? Cette action est irréversible.',
+            danger: true,
+        }, async () => {
+            const res = await fetch(`/api/encodages/${id}`, { method: 'DELETE', headers: apiHeaders() });
+            const data = await res.json();
+            if (data.status === 'success') {
+                iziToast.success({ title: 'Supprimé', message: data.message });
+                loadEncodages();
+            } else {
+                iziToast.error({ title: 'Erreur', message: data.message });
+            }
         });
     };
 

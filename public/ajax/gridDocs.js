@@ -150,30 +150,20 @@ document.addEventListener('DOMContentLoaded', function() {
         docModal.show();
     };
 
-    window.deleteDoc = function(id){
-        iziToast.question({
-            timeout:20000, close:true, overlay:true, displayMode:'once',
-            id:'question-doc', zindex:9999,
-            title:'Confirmation',
-            message:'Voulez-vous vraiment supprimer ce document ?',
-            position:'center',
-            theme:'dark',
-            buttons:[
-                ['<button>Oui</button>', function(instance, toast){
-                    instance.hide({ transitionOut:'fadeOut' }, toast,'button');
-                    fetch(`/api/docs/${id}`,{ method:'DELETE', headers: apiHeaders() })
-                    .then(res=>res.json())
-                    .then(data=>{
-                        if(data.status==='success'){
-                            iziToast.success({ title:'Supprimé', message:data.message });
-                            loadDocs();
-                        } else {
-                            iziToast.error({ title:'Erreur', message:data.message });
-                        }
-                    });
-                }, true],
-                ['<button>Non</button>', function(instance, toast){ instance.hide({ transitionOut:'fadeOut' }, toast,'button'); }]
-            ]
+    window.deleteDoc = async function(id){
+        await AuthentiqConfirm.whenConfirmed({
+            title: 'Supprimer le document',
+            text: 'Voulez-vous vraiment supprimer ce document ?',
+            danger: true,
+        }, async () => {
+            const res = await fetch(`/api/docs/${id}`, { method: 'DELETE', headers: apiHeaders() });
+            const data = await res.json();
+            if (data.status === 'success') {
+                iziToast.success({ title: 'Supprimé', message: data.message });
+                loadDocs();
+            } else {
+                iziToast.error({ title: 'Erreur', message: data.message });
+            }
         });
     };
 

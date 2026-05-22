@@ -766,10 +766,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     };
 
-    window.resendClientCredentials = function(id) {
-        if (!confirm('Renvoyer un nouveau mot de passe et le code OTP par email à ce client ? L\'ancien mot de passe ne fonctionnera plus.')) {
-            return;
-        }
+    window.resendClientCredentials = async function(id) {
+        const ok = await AuthentiqConfirm.confirm({
+            title: 'Renvoyer les identifiants',
+            text: 'Un nouveau mot de passe et un code OTP seront envoyés par email. L\'ancien mot de passe ne fonctionnera plus.',
+            icon: 'warning',
+            confirmButtonText: 'Envoyer',
+        });
+        if (!ok) return;
 
         iziToast.info({
             title: 'Envoi',
