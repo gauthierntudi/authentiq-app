@@ -56,6 +56,11 @@ class Client extends Model
         return $this->hasMany(Encodage::class, 'id_client');
     }
 
+    public function kycSubmissions(): HasMany
+    {
+        return $this->hasMany(ClientKycSubmission::class, 'id_client');
+    }
+
     /** Version cache photo (created_at — pas d’updated_at en base). */
     public function photoCacheVersion(): ?int
     {

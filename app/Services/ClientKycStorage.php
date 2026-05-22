@@ -28,4 +28,55 @@ class ClientKycStorage
             ? 'uploads/'.$relativePath
             : $relativePath;
     }
+
+    public function readBytes(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        $normalized = str_replace('\\', '/', ltrim(str_replace(['../', '..\\'], '', $path), '/'));
+        $diskPath = $this->diskPath($normalized);
+
+        $bytes = $this->documents->diskGet($diskPath);
+        if ($bytes !== null) {
+            return $bytes;
+        }
+
+        foreach ($this->legacyCandidates($normalized) as $file) {
+            if (is_file($file)) {
+                $contents = file_get_contents($file);
+
+                return $contents !== false ? $contents : null;
+            }
+        }
+
+        return null;
+    }
+
+    private function diskPath(string $normalized): string
+    {
+        if (str_starts_with($normalized, 'uploads/kyc/')) {
+            return substr($normalized, strlen('uploads/'));
+        }
+
+        if (str_starts_with($normalized, 'uploads/')) {
+            return substr($normalized, strlen('uploads/'));
+        }
+
+        if (str_starts_with($normalized, 'kyc/')) {
+            return $normalized;
+        }
+
+        return 'kyc/'.basename($normalized);
+    }
+
+    /** @return list<string> */
+    private function legacyCandidates(string $normalized): array
+    {
+        return [
+            public_path($normalized),
+            public_path('uploads/'.$normalized),
+        ];
+    }
 }

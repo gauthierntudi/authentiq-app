@@ -69,6 +69,15 @@
         </li>
 
         <li class="side-nav-item">
+            <a href="{{ route('kyc.index') }}" class="side-nav-link{{ request()->routeIs('kyc.index') ? ' active' : '' }}">
+                <span class="menu-icon">
+                    <iconify-icon icon="solar:shield-check-bold-duotone"></iconify-icon>
+                </span>
+                <span class="menu-text"> Validation KYC </span>
+            </a>
+        </li>
+
+        <li class="side-nav-item">
             <a href="{{ route('documents.library') }}" class="side-nav-link{{ request()->routeIs('documents.library') ? ' active' : '' }}">
                 <span class="menu-icon">
                     <iconify-icon icon="solar:folder-with-files-bold-duotone"></iconify-icon>

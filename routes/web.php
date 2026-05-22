@@ -11,6 +11,7 @@ use App\Http\Controllers\Web\ProfilePageController;
 use App\Http\Controllers\Web\ReportPageController;
 use App\Http\Controllers\Web\UserPageController;
 use App\Http\Controllers\Web\PublicVerifyController;
+use App\Http\Controllers\Web\KycPageController;
 use App\Http\Controllers\Web\VillePageController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,7 @@ Route::middleware(['auth.user', 'role.staff'])->group(function () {
     Route::get('/mon-profil', [ProfilePageController::class, 'index'])->name('profile.index');
 
     Route::get('/gestion-clients', [ClientPageController::class, 'index'])->name('clients.index');
+    Route::get('/validation-kyc', [KycPageController::class, 'index'])->name('kyc.index');
     Route::get('/mes-documents', [DocumentsLibraryPageController::class, 'index'])->name('documents.library');
     Route::get('/encodage-document', [EncodagePageController::class, 'index'])->name('encodage.index');
 

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\ClientApiController;
+use App\Http\Controllers\Api\ClientKycAdminApiController;
 use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\CommuneApiController;
 use App\Http\Controllers\Api\DocApiController;
@@ -96,6 +97,13 @@ Route::middleware('web')->group(function () {
 
         Route::post('/clients/search-by-photo', [ClientApiController::class, 'searchByPhoto']);
         Route::post('/clients/check-duplicates', [ClientApiController::class, 'checkDuplicates']);
+        Route::get('/kyc-submissions', [ClientKycAdminApiController::class, 'index']);
+        Route::get('/kyc-submissions/{id}', [ClientKycAdminApiController::class, 'show'])->whereNumber('id');
+        Route::get('/kyc-submissions/{id}/image/{side}', [ClientKycAdminApiController::class, 'image'])
+            ->whereNumber('id')->where('side', 'recto|verso');
+        Route::post('/kyc-submissions/{id}/approve', [ClientKycAdminApiController::class, 'approve'])->whereNumber('id');
+        Route::post('/kyc-submissions/{id}/reject', [ClientKycAdminApiController::class, 'reject'])->whereNumber('id');
+
         Route::get('/clients', [ClientApiController::class, 'index']);
         Route::get('/clients/{id}/photo', [ClientApiController::class, 'photo'])->whereNumber('id');
         Route::get('/clients/{id}', [ClientApiController::class, 'show'])->whereNumber('id');
