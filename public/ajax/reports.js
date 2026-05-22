@@ -16,6 +16,7 @@
     const recentTable = document.getElementById('report-recent-table');
 
     let chartMain = null;
+    let recentGrid = null;
 
     const endpoints = {
         daily: '/api/reports/daily',
@@ -162,44 +163,57 @@
         `);
     }
 
-    function statusBadge(status) {
+    function statusBadgeHtml(status) {
         const map = {
             complete: ['Finalisé', 'encodage-status-badge--complete'],
             incomplete: ['En cours', 'encodage-status-badge--incomplete'],
             expired: ['Expiré', 'encodage-status-badge--expired'],
         };
-        const [text, cls] = map[status] || [status, ''];
-        return `<span class="encodage-status-badge ${cls}">${text}</span>`;
+        const [text, cls] = map[status] || [status || '—', ''];
+        return gridjs.html(`<span class="encodage-status-badge ${cls}">${text}</span>`);
     }
 
     function renderRecent(rows) {
         if (!recentTable || typeof gridjs === 'undefined') return;
-        const data = (rows || []).map((r) => [
+
+        const list = rows || [];
+        const tableData = list.map((r) => [
             r.id_encodage,
-            clientCellHtml(r.client_photo_url, r.client_nom),
+            r.status || 'incomplete',
+            r.client_nom || '—',
+            r.client_photo_url || '',
             r.type_doc || '—',
             r.agent_nom || '—',
             r.affectation || '—',
             r.montant != null ? fmtMoney(r.montant) : '—',
             r.nb_pages ?? 0,
-            statusBadge(r.status),
             r.date || '—',
         ]);
 
-        recentTable.innerHTML = '';
-        new gridjs.Grid({
-            columns: [
-                { id: 'id', name: 'ID', width: '70px' },
-                { id: 'client', name: 'Client', formatter: (c) => c },
-                'Document',
-                'Agent',
-                'Affectation',
-                { id: 'montant', name: 'Montant', width: '100px' },
-                { id: 'pages', name: 'Pages', width: '70px' },
-                { id: 'status', name: 'Statut', width: '100px', formatter: (c) => gridjs.html(c) },
-                { id: 'date', name: 'Date', width: '130px' },
-            ],
-            data,
+        const columns = [
+            { name: 'ID', width: '70px' },
+            {
+                name: 'Client',
+                width: '200px',
+                sort: false,
+                formatter: (_, row) => clientCellHtml(row.cells[3].data, row.cells[2].data),
+            },
+            { name: 'Document', width: '140px' },
+            { name: 'Agent', width: '130px' },
+            { name: 'Affectation', width: '120px' },
+            { name: 'Montant', width: '100px' },
+            { name: 'Pages', width: '70px' },
+            {
+                name: 'Statut',
+                width: '100px',
+                formatter: (_, row) => statusBadgeHtml(row.cells[1].data),
+            },
+            { name: 'Date', width: '130px' },
+        ];
+
+        const gridConfig = {
+            columns,
+            data: tableData,
             pagination: { limit: 10 },
             sort: true,
             search: false,
@@ -213,13 +227,29 @@
                 noRecordsFound: 'Aucun encodage sur cette période',
             },
             className: { table: 'table table-sm mb-0' },
-        }).render(recentTable);
+        };
+
+        if (recentGrid) {
+            recentGrid.updateConfig(gridConfig).forceRender();
+            return;
+        }
+
+        recentTable.innerHTML = '';
+        recentGrid = new gridjs.Grid(gridConfig);
+        recentGrid.render(recentTable);
     }
 
     async function loadReport() {
         statsEl.innerHTML = '<div class="report-loading col-12">Chargement…</div>';
         try {
-            const res = await fetch(apiUrl(), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            const res = await fetch(apiUrl(), {
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                },
+            });
             const json = await res.json();
             if (json.status !== 'success') {
                 throw new Error(json.message || 'Erreur');
