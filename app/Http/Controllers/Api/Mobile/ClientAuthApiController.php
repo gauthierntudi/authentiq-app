@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Services\ClientAuthService;
 use App\Services\ClientDuplicateGuard;
+use App\Services\ClientKycService;
 use App\Services\ClientPhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ class ClientAuthApiController extends Controller
         private ClientAuthService $clientAuth,
         private ClientDuplicateGuard $duplicateGuard,
         private ClientPhotoStorage $clientPhotos,
+        private ClientKycService $kyc,
     ) {}
 
     /** Inscription autonome : crée le client (inactif) et envoie l'OTP. */
@@ -213,6 +215,76 @@ class ClientAuthApiController extends Controller
         ]);
     }
 
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $client = \App\Support\CurrentClient::get();
+
+        if (! $this->kyc->canEditProfile($client)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Profil verrouillé : votre identité est validée (KYC approuvé).',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'nom_complet' => 'sometimes|required|string|max:255',
+            'tel' => ['sometimes', 'required', 'regex:/^0\d{9}$/'],
+            'email' => 'sometimes|required|email|max:255',
+            'id_province' => 'sometimes|required|integer|min:1',
+            'id_ville' => 'sometimes|required|integer|min:1',
+            'type_piece_identite' => 'sometimes|required|string|in:CNI,Passeport',
+            'numero_national' => 'nullable|string|max:50',
+            'numero_passeport' => 'nullable|string|max:50',
+            'adresse' => 'nullable|string',
+        ], [
+            'tel.regex' => 'Numéro de téléphone invalide (10 chiffres, commence par 0).',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
+        }
+
+        $data = $validator->validated();
+
+        if (isset($data['tel']) || isset($data['email'])) {
+            $tel = $data['tel'] ?? $client->tel;
+            $email = $data['email'] ?? $client->email;
+            $exists = Client::query()
+                ->where('id_client', '!=', $client->id_client)
+                ->where(function ($q) use ($tel, $email) {
+                    $q->where('tel', $tel);
+                    if ($email !== '') {
+                        $q->orWhere('email', $email);
+                    }
+                })
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Ce téléphone ou cet e-mail est déjà utilisé.',
+                ], 409);
+            }
+        }
+
+        if (isset($data['type_piece_identite'])) {
+            if ($data['type_piece_identite'] === 'CNI' && empty($data['numero_national'] ?? $client->numero_national)) {
+                return response()->json(['status' => 'error', 'message' => 'Numéro national requis pour la CNI.'], 422);
+            }
+            if ($data['type_piece_identite'] === 'Passeport' && empty($data['numero_passeport'] ?? $client->numero_passeport)) {
+                return response()->json(['status' => 'error', 'message' => 'Numéro de passeport requis.'], 422);
+            }
+        }
+
+        $client->update($data);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Profil mis à jour.',
+            'client' => $this->clientPayload($client->fresh()->load(['province', 'ville'])),
+        ]);
+    }
+
     /** Photo du client connecté (Bearer token requis). */
     public function photo(): Response
     {
@@ -248,6 +320,13 @@ class ClientAuthApiController extends Controller
             'nom_ville' => $client->ville?->nom,
             'mobile_registered_at' => $client->mobile_registered_at?->toIso8601String(),
             'photo_url' => $this->mobilePhotoUrl($client),
+            'type_piece_identite' => $client->type_piece_identite,
+            'numero_national' => $client->numero_national,
+            'numero_passeport' => $client->numero_passeport,
+            'adresse' => $client->adresse,
+            'kyc_status' => $this->kyc->resolveStatus($client),
+            'can_edit_profile' => $this->kyc->canEditProfile($client),
+            'kyc' => $this->kyc->kycPayload($client),
         ];
     }
 

@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\EncodageWorkflowApiController;
 use App\Http\Controllers\Api\GeoApiController;
 use App\Http\Controllers\Api\Mobile\ClientAuthApiController as MobileClientAuthApiController;
 use App\Http\Controllers\Api\Mobile\ClientDocumentApiController as MobileClientDocumentApiController;
+use App\Http\Controllers\Api\Mobile\ClientKycApiController as MobileClientKycApiController;
+use App\Http\Controllers\Api\Mobile\ClientNotificationApiController as MobileClientNotificationApiController;
 use App\Http\Controllers\Api\ProfileApiController;
 use App\Http\Controllers\Api\ReportApiController;
 use App\Http\Controllers\Api\UserApiController;
@@ -31,8 +33,18 @@ Route::prefix('mobile/client')->group(function () {
 
     Route::middleware('auth.client')->group(function () {
         Route::get('/me', [MobileClientAuthApiController::class, 'me']);
+        Route::put('/me', [MobileClientAuthApiController::class, 'updateProfile']);
         Route::get('/me/photo', [MobileClientAuthApiController::class, 'photo']);
         Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
+
+        Route::get('/kyc', [MobileClientKycApiController::class, 'status']);
+        Route::post('/kyc', [MobileClientKycApiController::class, 'submit']);
+
+        Route::get('/notifications', [MobileClientNotificationApiController::class, 'index']);
+        Route::get('/notifications/unread-count', [MobileClientNotificationApiController::class, 'unreadCount']);
+        Route::post('/notifications/read-all', [MobileClientNotificationApiController::class, 'markAllRead']);
+        Route::post('/notifications/{notificationId}/read', [MobileClientNotificationApiController::class, 'markRead'])
+            ->whereNumber('notificationId');
 
         Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
         Route::get('/documents/shared', [MobileClientDocumentApiController::class, 'sharedWithMe']);
