@@ -214,18 +214,26 @@
         if (!recentTable || typeof gridjs === 'undefined') return;
 
         const list = rows || [];
-        const tableData = list.map((r) => [
-            r.id_encodage,
-            r.status || 'incomplete',
-            r.client_nom || '—',
-            r.client_photo_url || '',
-            r.type_doc || '—',
-            r.agent_nom || '—',
-            r.affectation || '—',
-            r.montant != null ? fmtMoney(r.montant) : '—',
-            r.nb_pages ?? 0,
-            r.date || '—',
-        ]);
+        const rowMetaById = new Map();
+
+        const tableData = list.map((r) => {
+            rowMetaById.set(r.id_encodage, {
+                photo: r.client_photo_url || '',
+                name: r.client_nom || '—',
+            });
+
+            return [
+                r.id_encodage,
+                r.status || 'incomplete',
+                r.client_nom || '—',
+                r.type_doc || '—',
+                r.agent_nom || '—',
+                r.affectation || '—',
+                r.montant != null ? fmtMoney(r.montant) : '—',
+                r.nb_pages ?? 0,
+                r.date || '—',
+            ];
+        });
 
         const columns = [
             { name: 'ID', width: '70px' },
@@ -233,7 +241,11 @@
                 name: 'Client',
                 width: '200px',
                 sort: false,
-                formatter: (_, row) => clientCellHtml(row.cells[3].data, row.cells[2].data),
+                formatter: (_, row) => {
+                    const id = row.cells[0].data;
+                    const meta = rowMetaById.get(id) || {};
+                    return clientCellHtml(meta.photo, meta.name || row.cells[2].data);
+                },
             },
             { name: 'Document', width: '140px' },
             { name: 'Agent', width: '130px' },
