@@ -39,6 +39,23 @@ class ClientDocumentApiController extends Controller
         return response()->json(['status' => 'success', 'documents' => $items]);
     }
 
+    /** Documents qu'un autre client a partagés avec moi (autorisations actives). */
+    public function sharedWithMe(): JsonResponse
+    {
+        $client = CurrentClient::get();
+
+        $items = $this->verifyAuth->listEncodagesSharedWith($client)
+            ->map(function (Encodage $e) {
+                $payload = $this->encodagePayload($e, detailed: true);
+                $payload['is_owner'] = false;
+                $payload['owner_nom'] = $e->client?->nom_complet;
+
+                return $payload;
+            });
+
+        return response()->json(['status' => 'success', 'documents' => $items]);
+    }
+
     /**
      * Vérifier un document via son numéro (scan QR).
      * Propriétaire : accès complet. Tiers : nécessite une autorisation accordée.

@@ -78,4 +78,27 @@ class DocumentVerifyAuthorizationService
             ->orderByDesc('id_grant')
             ->get();
     }
+
+    /** Documents partagés avec le client connecté (il est bénéficiaire d'une autorisation). */
+    public function listEncodagesSharedWith(Client $grantee): \Illuminate\Support\Collection
+    {
+        $encodageIds = DocumentVerifyGrant::query()
+            ->where('id_client_grantee', $grantee->id_client)
+            ->whereNull('revoked_at')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->pluck('id_encodage');
+
+        if ($encodageIds->isEmpty()) {
+            return collect();
+        }
+
+        return Encodage::query()
+            ->with(['doc', 'commune', 'client', 'pages'])
+            ->whereIn('id_encodage', $encodageIds)
+            ->whereIn('status', ['complete', 'expired'])
+            ->orderByDesc('id_encodage')
+            ->get();
+    }
 }

@@ -34,6 +34,7 @@ Route::prefix('mobile/client')->group(function () {
         Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
 
         Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
+        Route::get('/documents/shared', [MobileClientDocumentApiController::class, 'sharedWithMe']);
         Route::post('/documents/verify', [MobileClientDocumentApiController::class, 'verify']);
         Route::get('/documents/verify-grants', [MobileClientDocumentApiController::class, 'listGrants']);
         Route::post('/documents/verify-grants', [MobileClientDocumentApiController::class, 'grant']);
