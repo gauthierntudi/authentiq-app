@@ -17,7 +17,7 @@ Authentification staff (agents) : session cookie — routes `/api/*` avec `auth.
 | POST | `/register` | Inscription autonome (`nom_complet`, `tel`, `id_province`, `id_ville`, `email?`, `password?`) → OTP |
 | POST | `/verify-otp` | Active le compte + retourne `auth.token` Bearer |
 | POST | `/send-otp` | Renvoyer OTP (`client_id` ou `tel`) |
-| POST | `/login` | Connexion mot de passe (`login`, `password`) → Bearer |
+| POST | `/login` | Étape 1 : mot de passe valide → `requires_otp: true`, `client_id`, envoi OTP (pas de token) |
 
 ## Authentifié (header `Authorization: Bearer {token}`)
 

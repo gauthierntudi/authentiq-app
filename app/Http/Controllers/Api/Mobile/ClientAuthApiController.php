@@ -91,7 +91,9 @@ class ClientAuthApiController extends Controller
         ], 201);
     }
 
-    /** Connexion par téléphone/email + mot de passe (compte déjà actif). */
+    /**
+     * Étape 1 connexion : vérifie le mot de passe puis envoie l'OTP (pas de token tant que l'OTP n'est pas validé).
+     */
     public function login(Request $request): JsonResponse
     {
         $login = trim((string) $request->input('login', ''));
@@ -110,19 +112,31 @@ class ClientAuthApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Identifiants incorrects.'], 401);
         }
 
-        if (! $client->is_active) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Compte non activé. Utilisez verify-otp après inscription.',
-            ], 403);
+        $delivery = $this->clientAuth->issueOtp($client);
+
+        $channels = [];
+        if ($delivery['whatsapp_sent'] ?? false) {
+            $channels[] = 'WhatsApp';
+        }
+        if ($delivery['mail_sent'] ?? false) {
+            $channels[] = 'email';
         }
 
-        $token = $this->clientAuth->issueToken($client);
+        $message = 'Identifiants valides. Saisissez le code OTP pour continuer.';
+        if ($channels !== []) {
+            $message .= ' Code envoyé par '.implode(' et ', $channels).'.';
+        }
 
         return response()->json([
             'status' => 'success',
-            'client' => $this->clientPayload($client),
-            'auth' => $token,
+            'requires_otp' => true,
+            'client_id' => $client->id_client,
+            'tel' => $client->tel,
+            'message' => $message,
+            'otp_delivery' => [
+                'whatsapp_sent' => $delivery['whatsapp_sent'] ?? false,
+                'mail_sent' => $delivery['mail_sent'] ?? false,
+            ],
         ]);
     }
 
