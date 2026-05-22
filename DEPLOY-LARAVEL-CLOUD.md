@@ -222,6 +222,20 @@ Sans migration, la grille clients affiche l’avatar par défaut ; les nouvelles
 
 Les photos s’affichent via **`/api/clients/{id}/photo`** (proxy Laravel), pas via URL S3 directe — évite les erreurs CORS / 404 du navigateur sur `*.s3.amazonaws.com`.
 
+## 9b. Photos utilisateurs (staff)
+
+Même cause que les clients : les chemins `uploads/users/...` en base pointent vers **`public/uploads/users/`**, effacé à chaque redéploiement Laravel Cloud.
+
+- **Nouvelles photos** (profil ou grille utilisateurs) → S3 automatiquement si `AUTHENTIQ_DOCUMENTS_DISK=s3`.
+- **Anciennes photos** : migration one-shot depuis une machine qui a encore les fichiers locaux :
+
+  ```bash
+  php artisan authentiq:migrate-user-photos
+  php artisan authentiq:migrate-user-photos --dry-run
+  ```
+
+Affichage : **`/api/users/{id}/photo`** (header, profil, grille admin).
+
 ## 10. Commandes manuelles (optionnel, console Cloud)
 
 ```bash

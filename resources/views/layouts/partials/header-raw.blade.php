@@ -426,7 +426,7 @@
         <div class="topbar-item nav-user">
             <div class="dropdown">
                 <a class="topbar-link dropdown-toggle drop-arrow-none px-2" data-bs-toggle="dropdown" data-bs-offset="0,19" type="button" aria-haspopup="false" aria-expanded="false">
-                    <img id="userProfileImage" src="{{ !empty($user['photo']) ? asset($user['photo']) : asset('assets/images/user.jpg') }}" width="32" class="rounded-circle me-lg-2 d-flex" alt="user-image">
+                    <img id="userProfileImage" src="{{ $user['photo_url'] ?? asset('assets/images/user.jpg') }}" width="32" class="rounded-circle me-lg-2 d-flex" alt="user-image">
                     <span class="d-lg-flex flex-column gap-1 d-none">
                         <h5 class="my-0">
                             {{ $user['nom_complet'] ?? '' }}

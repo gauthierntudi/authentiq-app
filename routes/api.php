@@ -51,6 +51,7 @@ Route::middleware('web')->group(function () {
     Route::middleware(['auth.user', 'role.staff'])->group(function () {
         Route::get('/profile', [ProfileApiController::class, 'show']);
         Route::post('/profile/update', [ProfileApiController::class, 'update']);
+        Route::get('/users/{id}/photo', [UserApiController::class, 'photo'])->whereNumber('id');
 
         Route::get('/dashboard/stats', [DashboardApiController::class, 'stats']);
 

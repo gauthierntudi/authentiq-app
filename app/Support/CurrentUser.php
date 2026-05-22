@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\User;
+use App\Services\UserPhotoStorage;
 
 class CurrentUser
 {
@@ -26,6 +27,8 @@ class CurrentUser
 
     public static function loginFromModel(User $user): void
     {
+        $photos = app(UserPhotoStorage::class);
+
         session([
             'user' => [
                 'id_user' => $user->id_user,
@@ -38,6 +41,7 @@ class CurrentUser
                 'id_commune' => $user->id_commune,
                 'affectation' => $user->affectation,
                 'photo' => $user->photo,
+                'photo_url' => $photos->photoUrl($user->photo, $user->id_user, $user->photoCacheVersion()),
             ],
         ]);
     }

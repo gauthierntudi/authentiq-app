@@ -4,14 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\UserPhotoStorage;
 use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 class ProfileApiController extends Controller
 {
+    public function __construct(private UserPhotoStorage $userPhotos) {}
+
     public function show(): JsonResponse
     {
         $user = CurrentUser::get();
@@ -106,7 +108,7 @@ class ProfileApiController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $user->photo = $this->storePhoto($request->file('photo'));
+            $user->photo = $this->userPhotos->store($user, $request->file('photo'));
         }
 
         try {
@@ -139,7 +141,7 @@ class ProfileApiController extends Controller
             'role' => $u->role,
             'affectation' => $u->affectation,
             'photo' => $photo,
-            'photo_url' => $photo ? asset($photo) : asset('assets/images/user.jpg'),
+            'photo_url' => $this->userPhotos->photoUrl($u->photo, $u->id_user, $u->photoCacheVersion()),
             'id_province' => $u->id_province,
             'id_ville' => $u->id_ville,
             'id_commune' => $u->id_commune,
@@ -147,18 +149,5 @@ class ProfileApiController extends Controller
             'nom_ville' => $u->ville?->nom,
             'nom_commune' => $u->commune?->nom,
         ];
-    }
-
-    private function storePhoto($file): string
-    {
-        $dir = public_path('uploads/users');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        $name = 'user_'.Str::random(12).'.jpg';
-        $file->move($dir, $name);
-
-        return 'uploads/users/'.$name;
     }
 }

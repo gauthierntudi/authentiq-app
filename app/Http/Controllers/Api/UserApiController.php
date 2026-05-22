@@ -5,14 +5,18 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\MailService;
+use App\Services\UserPhotoStorage;
+use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 class UserApiController extends Controller
 {
-    public function __construct(private MailService $mail) {}
+    public function __construct(
+        private MailService $mail,
+        private UserPhotoStorage $userPhotos,
+    ) {}
 
     public function index(): JsonResponse
     {
@@ -25,6 +29,31 @@ class UserApiController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $users,
+        ]);
+    }
+
+    public function photo(int $id): \Symfony\Component\HttpFoundation\Response
+    {
+        $current = CurrentUser::get();
+        $user = User::query()->find($id);
+
+        if (! $current || ! $user || ! $current->isStaff()) {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        if (! $user->photo) {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        $bytes = $this->userPhotos->readBytes($user->photo);
+        if ($bytes === null || $bytes === '') {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        return response($bytes, 200, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
         ]);
     }
 
@@ -70,11 +99,6 @@ class UserApiController extends Controller
             ]);
         }
 
-        $photoPath = null;
-        if ($request->hasFile('photo')) {
-            $photoPath = $this->storePhoto($request->file('photo'));
-        }
-
         try {
             if ($id > 0) {
                 $user = User::query()->findOrFail($id);
@@ -90,8 +114,8 @@ class UserApiController extends Controller
                 if (! empty($data['password'])) {
                     $user->password = password_hash($data['password'], PASSWORD_DEFAULT);
                 }
-                if ($photoPath) {
-                    $user->photo = $photoPath;
+                if ($request->hasFile('photo')) {
+                    $user->photo = $this->userPhotos->store($user, $request->file('photo'));
                 }
 
                 $user->save();
@@ -116,8 +140,13 @@ class UserApiController extends Controller
                 'id_ville' => $data['id_ville'] ?: null,
                 'id_commune' => $data['id_commune'] ?: null,
                 'affectation' => $data['affectation'] ?? '',
-                'photo' => $photoPath,
+                'photo' => null,
             ]);
+
+            if ($request->hasFile('photo')) {
+                $user->photo = $this->userPhotos->store($user, $request->file('photo'));
+                $user->save();
+            }
 
             $mailBody = $this->mail->renderTemplate('mail_new_user.html', [
                 'NOM' => $data['nom_complet'],
@@ -169,19 +198,6 @@ class UserApiController extends Controller
         }
     }
 
-    private function storePhoto($file): string
-    {
-        $dir = public_path('uploads/users');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        $name = 'user_'.Str::random(12).'.jpg';
-        $file->move($dir, $name);
-
-        return 'uploads/users/'.$name;
-    }
-
     private function formatUser(User $u): array
     {
         $photo = $u->photo ? ltrim(str_replace('../', '', $u->photo), '/') : null;
@@ -194,6 +210,7 @@ class UserApiController extends Controller
             'role' => $u->role,
             'affectation' => $u->affectation,
             'photo' => $photo,
+            'photo_url' => $this->userPhotos->photoUrl($u->photo, $u->id_user, $u->photoCacheVersion()),
             'id_province' => $u->id_province,
             'id_ville' => $u->id_ville,
             'id_commune' => $u->id_commune,

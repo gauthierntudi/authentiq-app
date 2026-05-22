@@ -52,4 +52,9 @@ class User extends Model
     {
         return in_array($this->role, ['admin', 'user'], true);
     }
+
+    public function photoCacheVersion(): ?int
+    {
+        return $this->photo ? crc32(ltrim(str_replace('../', '', $this->photo), '/')) : null;
+    }
 }

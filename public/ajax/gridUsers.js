@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     tableContainer.innerHTML='';
                     const mappedData = resp.data.map(u=>[
                         u.id_user,
-                        u.photo||'',
+                        u.photo_url||u.photo||'',
                         u.nom_complet,
                         u.tel,
                         u.email,
