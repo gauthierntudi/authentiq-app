@@ -26,13 +26,13 @@ class ClientAuthApiController extends Controller
         $validator = Validator::make($request->all(), [
             'nom_complet' => 'required|string|max:255',
             'tel' => ['required', 'regex:/^0\d{9}$/'],
-            'email' => 'nullable|email|max:255',
-            'password' => 'nullable|string|min:8',
+            'email' => 'required|email|max:255',
+            'password' => 'required|string|min:8',
             'id_province' => 'required|integer|min:1',
             'id_ville' => 'required|integer|min:1',
-            'type_piece_identite' => 'nullable|string|max:50',
-            'numero_national' => 'nullable|string|max:50',
-            'numero_passeport' => 'nullable|string|max:50',
+            'type_piece_identite' => 'required|string|in:CNI,Passeport',
+            'numero_national' => 'required_if:type_piece_identite,CNI|nullable|string|max:50',
+            'numero_passeport' => 'required_if:type_piece_identite,Passeport|nullable|string|max:50',
             'adresse' => 'nullable|string',
         ], [
             'tel.regex' => 'Numéro de téléphone invalide (10 chiffres, commence par 0).',
@@ -74,9 +74,7 @@ class ClientAuthApiController extends Controller
             'mobile_registered_at' => now(),
         ]);
 
-        if (! empty($data['password'])) {
-            $this->clientAuth->setPassword($client, $data['password']);
-        }
+        $this->clientAuth->setPassword($client, $data['password']);
 
         $delivery = $this->clientAuth->issueOtp($client);
 
