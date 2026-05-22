@@ -106,6 +106,7 @@
             </a>
         </li>
 
+        @if(($user['role'] ?? '') === 'admin')
         <li class="side-nav-item">
             <a href="{{ route('reports.global') }}" class="side-nav-link{{ request()->routeIs('reports.global') ? ' active' : '' }}">
                 <span class="menu-icon">
@@ -114,6 +115,7 @@
                 <span class="menu-text"> Global</span>
             </a>
         </li>
+        @endif
 
         <li class="side-nav-title mt-2">Options</li>
 
@@ -127,17 +129,18 @@
         </li>
 
 
+        @if(($user['role'] ?? '') === 'admin')
         <li class="side-nav-item">
-            <a href="{{ url('/gestion-utilisateurs') }}" class="side-nav-link">
+            <a href="{{ url('/gestion-utilisateurs') }}" class="side-nav-link{{ request()->routeIs('users.index') ? ' active' : '' }}">
                 <span class="menu-icon">
                     <iconify-icon icon="solar:users-group-rounded-bold-duotone"></iconify-icon>
                 </span>
                 <span class="menu-text"> Users</span>
             </a>
         </li>
-        
+
         <li class="side-nav-item">
-            <a href="{{ url('/documents') }}" class="side-nav-link">
+            <a href="{{ url('/documents') }}" class="side-nav-link{{ request()->routeIs('docs.index') ? ' active' : '' }}">
                 <span class="menu-icon">
                     <iconify-icon icon="solar:folder-with-files-bold-duotone"></iconify-icon>
                 </span>
@@ -146,7 +149,7 @@
         </li>
 
         <li class="side-nav-item">
-            <a href="{{ url('/maisons-communales') }}" class="side-nav-link">
+            <a href="{{ url('/maisons-communales') }}" class="side-nav-link{{ request()->routeIs('communes.index') ? ' active' : '' }}">
                 <span class="menu-icon">
                     <iconify-icon icon="solar:map-point-hospital-bold-duotone"></iconify-icon>
                 </span>
@@ -155,13 +158,14 @@
         </li>
 
         <li class="side-nav-item">
-            <a href="{{ url('/regions-villes') }}" class="side-nav-link">
+            <a href="{{ url('/regions-villes') }}" class="side-nav-link{{ request()->routeIs('villes.index') ? ' active' : '' }}">
                 <span class="menu-icon">
                     <iconify-icon icon="solar:point-on-map-bold-duotone"></iconify-icon>
                 </span>
                 <span class="menu-text"> Regions/ville</span>
             </a>
         </li>
+        @endif
 
         <li class="side-nav-item">
             <a href="#!" class="side-nav-link">

@@ -81,6 +81,13 @@ class AuthApiController extends Controller
             ]);
         }
 
+        if (! in_array($user->role, ['admin', 'user'], true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ce compte ne peut pas accéder à l\'interface agent.',
+            ], 403);
+        }
+
         CurrentUser::loginFromModel($user);
         session()->forget('pending_login_user_id');
 

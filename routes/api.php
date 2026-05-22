@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\DocumentsLibraryApiController;
 use App\Http\Controllers\Api\EncodageApiController;
 use App\Http\Controllers\Api\EncodageWorkflowApiController;
 use App\Http\Controllers\Api\GeoApiController;
+use App\Http\Controllers\Api\Mobile\ClientAuthApiController as MobileClientAuthApiController;
+use App\Http\Controllers\Api\Mobile\ClientDocumentApiController as MobileClientDocumentApiController;
 use App\Http\Controllers\Api\ProfileApiController;
 use App\Http\Controllers\Api\ReportApiController;
 use App\Http\Controllers\Api\UserApiController;
@@ -21,7 +23,29 @@ Route::middleware('web')->group(function () {
     Route::post('/auth/verify-otp', [AuthApiController::class, 'verifyOtp']);
     Route::post('/auth/resend-otp', [AuthApiController::class, 'resendOtp']);
 
-    Route::middleware('auth.user')->group(function () {
+    /*
+    | API mobile Flutter — clients finaux (Bearer token, pas de session staff).
+    */
+    Route::prefix('mobile/client')->group(function () {
+        Route::post('/register', [MobileClientAuthApiController::class, 'register']);
+        Route::post('/login', [MobileClientAuthApiController::class, 'login']);
+        Route::post('/send-otp', [MobileClientAuthApiController::class, 'sendOtp']);
+        Route::post('/verify-otp', [MobileClientAuthApiController::class, 'verifyOtp']);
+
+        Route::middleware('auth.client')->group(function () {
+            Route::get('/me', [MobileClientAuthApiController::class, 'me']);
+            Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
+
+            Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
+            Route::post('/documents/verify', [MobileClientDocumentApiController::class, 'verify']);
+            Route::get('/documents/verify-grants', [MobileClientDocumentApiController::class, 'listGrants']);
+            Route::post('/documents/verify-grants', [MobileClientDocumentApiController::class, 'grant']);
+            Route::delete('/documents/verify-grants/{grantId}', [MobileClientDocumentApiController::class, 'revokeGrant'])
+                ->whereNumber('grantId');
+        });
+    });
+
+    Route::middleware(['auth.user', 'role.staff'])->group(function () {
         Route::get('/profile', [ProfileApiController::class, 'show']);
         Route::post('/profile/update', [ProfileApiController::class, 'update']);
 
@@ -29,7 +53,6 @@ Route::middleware('web')->group(function () {
 
         Route::get('/reports/daily', [ReportApiController::class, 'daily']);
         Route::get('/reports/monthly', [ReportApiController::class, 'monthly']);
-        Route::get('/reports/global', [ReportApiController::class, 'global']);
 
         Route::get('/documents-library', [DocumentsLibraryApiController::class, 'index']);
 
@@ -53,14 +76,6 @@ Route::middleware('web')->group(function () {
             Route::post('/{id}/finalize', [EncodageWorkflowApiController::class, 'finalize'])->whereNumber('id');
         });
 
-        Route::get('/users', [UserApiController::class, 'index']);
-        Route::post('/users/save', [UserApiController::class, 'save']);
-        Route::delete('/users/{id}', [UserApiController::class, 'destroy'])->whereNumber('id');
-
-        Route::get('/docs', [DocApiController::class, 'index']);
-        Route::post('/docs/save', [DocApiController::class, 'save']);
-        Route::delete('/docs/{id}', [DocApiController::class, 'destroy'])->whereNumber('id');
-
         Route::post('/clients/search-by-photo', [ClientApiController::class, 'searchByPhoto']);
         Route::post('/clients/check-duplicates', [ClientApiController::class, 'checkDuplicates']);
         Route::get('/clients', [ClientApiController::class, 'index']);
@@ -71,17 +86,29 @@ Route::middleware('web')->group(function () {
         Route::post('/clients/resend-otp', [ClientApiController::class, 'resendOtp']);
         Route::post('/clients/toggle', [ClientApiController::class, 'toggle']);
 
-        Route::get('/communes', [CommuneApiController::class, 'index']);
-        Route::post('/communes/save', [CommuneApiController::class, 'save']);
-        Route::delete('/communes/{id}', [CommuneApiController::class, 'destroy'])->whereNumber('id');
-
-        Route::get('/villes', [VilleApiController::class, 'index']);
-        Route::post('/villes/save', [VilleApiController::class, 'save']);
-        Route::delete('/villes/{id}', [VilleApiController::class, 'destroy'])->whereNumber('id');
-
         Route::get('/provinces', [GeoApiController::class, 'provinces']);
         Route::get('/villes-by-province', [GeoApiController::class, 'villesByProvince']);
         Route::get('/villes-for-select', [GeoApiController::class, 'villesForSelect']);
         Route::get('/communes-by-ville', [GeoApiController::class, 'communesByVille']);
+
+        Route::middleware('role.admin')->group(function () {
+            Route::get('/reports/global', [ReportApiController::class, 'global']);
+
+            Route::get('/users', [UserApiController::class, 'index']);
+            Route::post('/users/save', [UserApiController::class, 'save']);
+            Route::delete('/users/{id}', [UserApiController::class, 'destroy'])->whereNumber('id');
+
+            Route::get('/docs', [DocApiController::class, 'index']);
+            Route::post('/docs/save', [DocApiController::class, 'save']);
+            Route::delete('/docs/{id}', [DocApiController::class, 'destroy'])->whereNumber('id');
+
+            Route::get('/communes', [CommuneApiController::class, 'index']);
+            Route::post('/communes/save', [CommuneApiController::class, 'save']);
+            Route::delete('/communes/{id}', [CommuneApiController::class, 'destroy'])->whereNumber('id');
+
+            Route::get('/villes', [VilleApiController::class, 'index']);
+            Route::post('/villes/save', [VilleApiController::class, 'save']);
+            Route::delete('/villes/{id}', [VilleApiController::class, 'destroy'])->whereNumber('id');
+        });
     });
 });

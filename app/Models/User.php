@@ -42,4 +42,14 @@ class User extends Model
     {
         return $this->belongsTo(Commune::class, 'id_commune');
     }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isStaff(): bool
+    {
+        return in_array($this->role, ['admin', 'user'], true);
+    }
 }

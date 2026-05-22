@@ -15,6 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.user' => \App\Http\Middleware\AuthenticateUser::class,
             'guest.user' => \App\Http\Middleware\RedirectIfAuthenticated::class,
+            'auth.client' => \App\Http\Middleware\AuthenticateClient::class,
+            'role.admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'role.staff' => \App\Http\Middleware\EnsureStaff::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

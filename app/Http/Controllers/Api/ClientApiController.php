@@ -8,6 +8,8 @@ use App\Services\ClientDuplicateGuard;
 use App\Services\ClientPhotoStorage;
 use App\Services\OtpService;
 use App\Services\RekognitionService;
+use App\Services\UserAccessService;
+use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -19,6 +21,7 @@ class ClientApiController extends Controller
         private RekognitionService $rekognition,
         private ClientPhotoStorage $clientPhotos,
         private ClientDuplicateGuard $duplicateGuard,
+        private UserAccessService $access,
     ) {}
 
     public function checkDuplicates(Request $request): JsonResponse
@@ -45,7 +48,12 @@ class ClientApiController extends Controller
 
     public function index(): JsonResponse
     {
-        $clients = Client::query()
+        $user = CurrentUser::get();
+        if (! $user) {
+            return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
+        }
+
+        $clients = $this->access->scopeClients(Client::query(), $user)
             ->with(['province', 'ville'])
             ->orderBy('nom_complet')
             ->get()
@@ -73,9 +81,14 @@ class ClientApiController extends Controller
 
     public function photo(int $id): \Symfony\Component\HttpFoundation\Response
     {
+        $user = CurrentUser::get();
         $client = Client::query()->find($id);
 
-        if (! $client?->photo) {
+        if (! $client || ! $user || ! $this->access->canAccessClient($user, $client)) {
+            return redirect(asset('assets/images/user.jpg'));
+        }
+
+        if (! $client->photo) {
             return redirect(asset('assets/images/user.jpg'));
         }
 
@@ -93,12 +106,13 @@ class ClientApiController extends Controller
 
     public function show(int $id): JsonResponse
     {
+        $user = CurrentUser::get();
         $client = Client::query()
             ->with(['province', 'ville'])
             ->find($id);
 
-        if (! $client) {
-            return response()->json(['status' => 'error', 'message' => 'Client introuvable']);
+        if (! $client || ! $user || ! $this->access->canAccessClient($user, $client)) {
+            return response()->json(['status' => 'error', 'message' => 'Client introuvable'], 404);
         }
 
         return response()->json([
@@ -128,6 +142,11 @@ class ClientApiController extends Controller
 
     public function save(Request $request): JsonResponse
     {
+        $staff = CurrentUser::get();
+        if (! $staff) {
+            return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
+        }
+
         $id = (int) $request->input('id_client', 0);
 
         $validator = Validator::make($request->all(), [
@@ -166,10 +185,16 @@ class ClientApiController extends Controller
         }
 
         try {
+            $data = $this->access->enforceClientGeoForUser($staff, $data, $isNew = $id <= 0);
+        } catch (\RuntimeException $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 403);
+        }
+
+        try {
             if ($id > 0) {
                 $client = Client::query()->find($id);
-                if (! $client) {
-                    return response()->json(['status' => 'error', 'message' => 'Client introuvable']);
+                if (! $client || ! $this->access->canAccessClient($staff, $client)) {
+                    return response()->json(['status' => 'error', 'message' => 'Client introuvable'], 404);
                 }
 
                 if (! $request->hasFile('photo') && ! $client->photo) {
@@ -316,6 +341,11 @@ class ClientApiController extends Controller
 
     public function searchByPhoto(Request $request): JsonResponse
     {
+        $staff = CurrentUser::get();
+        if (! $staff) {
+            return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
+        }
+
         if (! $this->rekognition->enabled()) {
             return response()->json([
                 'status' => 'error',
@@ -343,6 +373,14 @@ class ClientApiController extends Controller
         }
 
         $client = $result['client']->load(['province', 'ville']);
+
+        if (! $this->access->canAccessClient($staff, $client)) {
+            return response()->json([
+                'status' => 'success',
+                'found' => false,
+                'message' => 'Aucun client correspondant dans votre zone géographique.',
+            ]);
+        }
 
         return response()->json([
             'status' => 'success',
@@ -372,6 +410,7 @@ class ClientApiController extends Controller
 
     public function toggle(Request $request): JsonResponse
     {
+        $staff = CurrentUser::get();
         $id = (int) $request->input('id_client', 0);
         $active = (int) $request->input('active', 0);
 
@@ -379,8 +418,13 @@ class ClientApiController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Client invalide']);
         }
 
+        $client = Client::query()->find($id);
+        if (! $client || ! $staff || ! $this->access->canAccessClient($staff, $client)) {
+            return response()->json(['status' => 'error', 'message' => 'Client introuvable'], 404);
+        }
+
         try {
-            Client::query()->where('id_client', $id)->update(['is_active' => $active]);
+            $client->update(['is_active' => $active]);
 
             return response()->json([
                 'status' => 'success',

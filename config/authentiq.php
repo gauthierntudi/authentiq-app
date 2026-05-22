@@ -75,4 +75,11 @@ return [
     'rekognition_collection_id' => env('AUTHENTIQ_REKOGNITION_COLLECTION', 'authentiq-clients'),
     'rekognition_min_similarity' => (float) env('AUTHENTIQ_REKOGNITION_MIN_SIMILARITY', 80),
 
+    /*
+    |--------------------------------------------------------------------------
+    | API mobile client (Flutter) — durée des tokens Bearer
+    |--------------------------------------------------------------------------
+    */
+    'client_token_ttl_days' => (int) env('AUTHENTIQ_CLIENT_TOKEN_TTL_DAYS', 30),
+
 ];

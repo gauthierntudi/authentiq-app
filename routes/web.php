@@ -3,7 +3,6 @@
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\EncodagePageController;
-use App\Http\Controllers\Web\LegacyPageController;
 use App\Http\Controllers\Web\ClientPageController;
 use App\Http\Controllers\Web\CommunePageController;
 use App\Http\Controllers\Web\DocPageController;
@@ -32,21 +31,24 @@ Route::middleware('guest.user')->group(function () {
 Route::post('/deconnexion', [AuthController::class, 'logout'])->name('logout');
 Route::get('/deconnexion', [AuthController::class, 'logout']);
 
-Route::middleware('auth.user')->group(function () {
+Route::middleware(['auth.user', 'role.staff'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/mon-profil', [ProfilePageController::class, 'index'])->name('profile.index');
 
-    Route::get('/gestion-utilisateurs', [UserPageController::class, 'index'])->name('users.index');
     Route::get('/gestion-clients', [ClientPageController::class, 'index'])->name('clients.index');
     Route::get('/mes-documents', [DocumentsLibraryPageController::class, 'index'])->name('documents.library');
-    Route::get('/documents', [DocPageController::class, 'index'])->name('docs.index');
     Route::get('/encodage-document', [EncodagePageController::class, 'index'])->name('encodage.index');
-    Route::get('/maisons-communales', [CommunePageController::class, 'index'])->name('communes.index');
-    Route::get('/regions-villes', [VillePageController::class, 'index'])->name('villes.index');
-    Route::redirect('/ajouter-ville', '/regions-villes?tab=ajouter');
-    Route::redirect('/afficher-villes', '/regions-villes');
 
     Route::get('/rapports/journalier', [ReportPageController::class, 'daily'])->name('reports.daily');
     Route::get('/rapports/mensuel', [ReportPageController::class, 'monthly'])->name('reports.monthly');
-    Route::get('/rapports/global', [ReportPageController::class, 'global'])->name('reports.global');
+
+    Route::middleware('role.admin')->group(function () {
+        Route::get('/gestion-utilisateurs', [UserPageController::class, 'index'])->name('users.index');
+        Route::get('/documents', [DocPageController::class, 'index'])->name('docs.index');
+        Route::get('/maisons-communales', [CommunePageController::class, 'index'])->name('communes.index');
+        Route::get('/regions-villes', [VillePageController::class, 'index'])->name('villes.index');
+        Route::redirect('/ajouter-ville', '/regions-villes?tab=ajouter');
+        Route::redirect('/afficher-villes', '/regions-villes');
+        Route::get('/rapports/global', [ReportPageController::class, 'global'])->name('reports.global');
+    });
 });

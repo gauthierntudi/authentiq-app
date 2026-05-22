@@ -210,12 +210,20 @@ class EncodageWorkflowApiController extends Controller
             return response()->json([]);
         }
 
-        $clients = Client::query()
+        $clientsQuery = Client::query()
             ->where(function ($q) use ($query) {
                 $q->where('nom_complet', 'like', "%{$query}%")
                     ->orWhere('tel', 'like', "%{$query}%")
                     ->orWhere('email', 'like', "%{$query}%");
-            })
+            });
+
+        if ($user->role !== 'admin') {
+            $clientsQuery
+                ->where('id_province', $user->id_province)
+                ->where('id_ville', $user->id_ville);
+        }
+
+        $clients = $clientsQuery
             ->orderBy('nom_complet')
             ->limit(20)
             ->get(['id_client', 'nom_complet', 'tel', 'email', 'is_active']);
@@ -253,6 +261,15 @@ class EncodageWorkflowApiController extends Controller
                 $client = Client::query()->find($clientId);
                 if (! $client) {
                     return response()->json(['status' => 'error', 'message' => 'Client introuvable.'], 404);
+                }
+
+                if ($user->role !== 'admin'
+                    && ((int) $client->id_province !== (int) $user->id_province
+                        || (int) $client->id_ville !== (int) $user->id_ville)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Ce client n\'appartient pas à votre province/ville.',
+                    ], 403);
                 }
 
                 $encodage->update(['id_client' => $clientId]);
@@ -309,6 +326,8 @@ class EncodageWorkflowApiController extends Controller
                     'nom_complet' => $nom,
                     'tel' => $tel,
                     'email' => $email,
+                    'id_province' => $user->id_province,
+                    'id_ville' => $user->id_ville,
                     'type_piece_identite' => $typePiece ?: null,
                     'numero_national' => $typePiece === 'CNI' ? $numeroPiece : null,
                     'numero_passeport' => $typePiece === 'Passeport' ? $numeroPiece : null,
