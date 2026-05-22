@@ -80,7 +80,7 @@ class OtpService
         return User::query()->find($userId);
     }
 
-    public function issueForClient(Client $client): array
+    public function issueForClient(Client $client, bool $skipMail = false): array
     {
         $otp = $this->whatsApp->generateOtp();
         $expireAt = Carbon::now()->addMinutes(config('authentiq.otp_ttl_minutes', 10));
@@ -103,7 +103,7 @@ class OtpService
         }
 
         $mailSent = false;
-        if (! empty($client->email)) {
+        if (! $skipMail && ! empty($client->email)) {
             $body = $this->mail->renderTemplate('otp_email.html', [
                 'OTP' => $otp,
                 'ANNEE' => date('Y'),

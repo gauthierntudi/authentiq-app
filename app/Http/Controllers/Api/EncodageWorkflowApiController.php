@@ -10,6 +10,7 @@ use App\Models\EncodagePage;
 use App\Models\User;
 use App\Jobs\ProcessEncodagePageTextract;
 use App\Services\ClientDuplicateGuard;
+use App\Services\ClientOnboardingService;
 use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
 use App\Services\EncodageQrService;
@@ -27,6 +28,7 @@ class EncodageWorkflowApiController extends Controller
 {
     public function __construct(
         private OtpService $otpService,
+        private ClientOnboardingService $clientOnboarding,
         private DocumentStorage $storage,
         private EncodageQrService $qrService,
         private TextractService $textract,
@@ -341,7 +343,7 @@ class EncodageWorkflowApiController extends Controller
                 $clientId = $client->id_client;
                 $encodage->update(['id_client' => $clientId]);
                 $requiresOtp = true;
-                $message = $this->otpMessageAfterIssue($this->otpService->issueForClient($client));
+                $message = $this->otpMessageAfterIssue($this->clientOnboarding->onboardStaffCreatedClient($client->fresh()));
             }
 
             return response()->json([
@@ -355,19 +357,17 @@ class EncodageWorkflowApiController extends Controller
         }
     }
 
-    /** @param  array{whatsapp_sent: bool, mail_sent: bool}  $delivery */
+    /** @param  array{whatsapp_sent?: bool, mail_sent?: bool, credentials_mail_sent?: bool}  $delivery */
     private function otpMessageAfterIssue(array $delivery): string
     {
         $message = 'Client enregistré. Validez le code OTP pour activer le compte.';
-        if ($delivery['whatsapp_sent'] || $delivery['mail_sent']) {
-            $channels = [];
-            if ($delivery['whatsapp_sent']) {
-                $channels[] = 'WhatsApp';
-            }
-            if ($delivery['mail_sent']) {
-                $channels[] = 'email';
-            }
-            $message .= ' Code envoyé par '.implode(' et ', $channels).'.';
+        if ($delivery['whatsapp_sent'] ?? false) {
+            $message .= ' OTP envoyé par WhatsApp.';
+        }
+        if ($delivery['credentials_mail_sent'] ?? false) {
+            $message .= ' Identifiants de connexion et OTP envoyés par email.';
+        } elseif ($delivery['mail_sent'] ?? false) {
+            $message .= ' Code OTP envoyé par email.';
         }
 
         return $message;

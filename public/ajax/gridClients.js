@@ -484,22 +484,27 @@ document.addEventListener('DOMContentLoaded', function() {
                                 },
                                 {
                                     name: "Actions",
-                                    width: "150px",
+                                    width: "210px",
                                     formatter: (cell, row) => {
                                         const id = row.cells[0].data;
-                                        const photo = row.cells[1].data || '';
                                         const nom = row.cells[2].data.replace(/'/g, "\\'");
                                         const tel = row.cells[3].data || '';
                                         const email = row.cells[4].data || '';
                                         const provinceId = row.cells[8].data || '';
                                         const villeId = row.cells[9].data || '';
                                         const active = row.cells[7].data || 0;
+                                        const credBtn = email.trim()
+                                            ? `<button class="btn btn-info btn-icon me-1 border-radius" onclick="resendClientCredentials(${id})" title="Renvoyer identifiants (email + OTP)">
+                                                    <iconify-icon icon="solar:letter-bold-duotone" style="font-size:1.4em"></iconify-icon>
+                                               </button>`
+                                            : '';
 
                                         if(active == 0) {
                                             return gridjs.html(`
                                                 <button class="btn btn-secondary btn-icon me-1 border-radius" onclick="editClient(${id}, '${nom}', '${tel}', '${email}', '${provinceId}', '${villeId}', ${active})" title="Modifier">
                                                     <iconify-icon icon="solar:pen-bold-duotone" style="font-size:1.4em"></iconify-icon>
                                                 </button>
+                                                ${credBtn}
                                                 <button class="btn btn-success btn-icon border-radius" onclick="confirmOTP(${id})" title="Confirmer OTP">
                                                     <iconify-icon icon="solar:bolt-bold-duotone" style="font-size:1.4em"></iconify-icon>
                                                 </button>
@@ -512,6 +517,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <button class="btn btn-secondary btn-icon me-1 border-radius" onclick="editClient(${id}, '${nom}', '${tel}', '${email}', '${provinceId}', '${villeId}', ${active})" title="Modifier">
                                                     <iconify-icon icon="solar:pen-bold-duotone" style="font-size:1.4em"></iconify-icon>
                                                 </button>
+                                                ${credBtn}
                                                 <button class="btn btn-danger btn-icon border-radius" onclick="toggleClient(${id}, ${active})" title="Désactiver">
                                                     <iconify-icon icon="solar:user-block-bold" style="font-size:1.4em"></iconify-icon>
                                                 </button>
@@ -757,6 +763,35 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(err => {
                 console.error('Erreur viewClientDetails:', err);
                 iziToast.error({ title: 'Erreur', message: 'Impossible de charger les détails' });
+            });
+    };
+
+    window.resendClientCredentials = function(id) {
+        if (!confirm('Renvoyer un nouveau mot de passe et le code OTP par email à ce client ? L\'ancien mot de passe ne fonctionnera plus.')) {
+            return;
+        }
+
+        iziToast.info({
+            title: 'Envoi',
+            message: 'Génération et envoi des identifiants…',
+            timeout: 3000,
+        });
+
+        fetch('/api/clients/resend-credentials', {
+            method: 'POST',
+            headers: apiHeaders(true),
+            body: JSON.stringify({ id_client: id }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    iziToast.success({ title: 'Succès', message: data.message });
+                } else {
+                    iziToast.error({ title: 'Erreur', message: data.message || 'Envoi impossible.' });
+                }
+            })
+            .catch(() => {
+                iziToast.error({ title: 'Erreur', message: 'Erreur lors de l\'envoi des identifiants.' });
             });
     };
 

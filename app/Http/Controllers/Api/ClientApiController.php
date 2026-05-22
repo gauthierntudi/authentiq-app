@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Services\ClientDuplicateGuard;
+use App\Services\ClientOnboardingService;
 use App\Services\ClientPhotoStorage;
 use App\Services\OtpService;
 use App\Services\RekognitionService;
@@ -18,6 +19,7 @@ class ClientApiController extends Controller
 {
     public function __construct(
         private OtpService $otpService,
+        private ClientOnboardingService $clientOnboarding,
         private RekognitionService $rekognition,
         private ClientPhotoStorage $clientPhotos,
         private ClientDuplicateGuard $duplicateGuard,
@@ -261,19 +263,9 @@ class ClientApiController extends Controller
                 ]);
             }
 
-            $delivery = $this->otpService->issueForClient($client);
+            $delivery = $this->clientOnboarding->onboardStaffCreatedClient($client->fresh());
 
-            $message = 'Client ajouté.';
-            if ($delivery['whatsapp_sent'] || $delivery['mail_sent']) {
-                $channels = [];
-                if ($delivery['whatsapp_sent']) {
-                    $channels[] = 'WhatsApp';
-                }
-                if ($delivery['mail_sent']) {
-                    $channels[] = 'email';
-                }
-                $message .= ' Code OTP envoyé par '.implode(' et ', $channels).'.';
-            }
+            $message = $this->deliveryMessage('Client ajouté.', $delivery);
 
             return response()->json([
                 'status' => 'success',
@@ -324,19 +316,48 @@ class ClientApiController extends Controller
 
         $delivery = $this->otpService->issueForClient($client);
 
-        $message = 'Nouveau code OTP généré';
-        if ($delivery['whatsapp_sent'] || $delivery['mail_sent']) {
-            $channels = [];
-            if ($delivery['whatsapp_sent']) {
-                $channels[] = 'WhatsApp';
-            }
-            if ($delivery['mail_sent']) {
-                $channels[] = 'email';
-            }
-            $message .= ' et envoyé par '.implode(' et ', $channels);
-        }
+        $message = $this->deliveryMessage('Nouveau code OTP généré', $delivery);
 
         return response()->json(['status' => 'success', 'message' => $message]);
+    }
+
+    public function resendCredentials(Request $request): JsonResponse
+    {
+        $staff = CurrentUser::get();
+        if (! $staff) {
+            return response()->json(['status' => 'error', 'message' => 'Non connecté'], 401);
+        }
+
+        $id = (int) $request->input('id_client', 0);
+        if ($id <= 0) {
+            return response()->json(['status' => 'error', 'message' => 'ID client manquant']);
+        }
+
+        $client = Client::query()->find($id);
+        if (! $client || ! $this->access->canAccessClient($staff, $client)) {
+            return response()->json(['status' => 'error', 'message' => 'Client introuvable'], 404);
+        }
+
+        if (empty($client->email)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ce client n\'a pas d\'adresse email — impossible d\'envoyer les identifiants par mail.',
+            ]);
+        }
+
+        try {
+            $delivery = $this->clientOnboarding->resendAccessCredentials($client);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => $this->deliveryMessage('Identifiants régénérés.', $delivery),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Erreur lors de l\'envoi : '.$e->getMessage(),
+            ]);
+        }
     }
 
     public function searchByPhoto(Request $request): JsonResponse
@@ -445,6 +466,24 @@ class ClientApiController extends Controller
             'conflict' => $check['conflict'],
             'client' => $check['client'],
         ], 409);
+    }
+
+    /** @param  array{whatsapp_sent?: bool, mail_sent?: bool, credentials_mail_sent?: bool}  $delivery */
+    private function deliveryMessage(string $prefix, array $delivery): string
+    {
+        $message = $prefix;
+        if ($delivery['whatsapp_sent'] ?? false) {
+            $message .= ' OTP envoyé par WhatsApp.';
+        }
+        if ($delivery['credentials_mail_sent'] ?? false) {
+            $message .= ' Identifiants de connexion et code OTP envoyés par email.';
+        } elseif ($delivery['mail_sent'] ?? false) {
+            $message .= ' Code OTP envoyé par email.';
+        } elseif (! ($delivery['whatsapp_sent'] ?? false)) {
+            $message .= ' Aucun envoi automatique (vérifiez email/téléphone et la configuration mail/Twilio).';
+        }
+
+        return $message;
     }
 
     private function indexClientFaceNow(?Client $client, ?string $photoBytes = null): void

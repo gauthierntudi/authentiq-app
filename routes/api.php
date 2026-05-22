@@ -88,6 +88,7 @@ Route::middleware('web')->group(function () {
         Route::post('/clients/save', [ClientApiController::class, 'save']);
         Route::post('/clients/verify-otp', [ClientApiController::class, 'verifyOtp']);
         Route::post('/clients/resend-otp', [ClientApiController::class, 'resendOtp']);
+        Route::post('/clients/resend-credentials', [ClientApiController::class, 'resendCredentials']);
         Route::post('/clients/toggle', [ClientApiController::class, 'toggle']);
 
         Route::get('/provinces', [GeoApiController::class, 'provinces']);

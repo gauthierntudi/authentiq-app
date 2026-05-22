@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vos identifiants Authentiq</title>
+</head>
+<body style="margin:0; padding:0; font-family:'Segoe UI',Arial,sans-serif; background-color:#f4f4f4;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f4f4;">
+        <tr>
+            <td align="center" style="padding:20px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px; background-color:#ffffff; border-radius:8px;">
+                    <tr>
+                        <td align="center" style="background-color:#38414a; padding:30px 20px; border-radius:8px 8px 0 0;">
+                            <img src="https://res.cloudinary.com/dfqlmkknv/image/upload/v1779320289/logo-h_ipaqkt.png" height="50" alt="Authentiq Logo" style="display:block; border:0;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:40px 30px; color:#333333; font-size:15px; line-height:1.6;">
+                            <h2 style="margin:0 0 20px 0; color:#38414a; font-size:22px; font-weight:600;">
+                                Bienvenue {{NOM}}
+                            </h2>
+                            <p style="margin:0 0 20px 0; color:#555555;">
+                                Votre compte client Authentiq a été créé. Voici vos identifiants pour l'application mobile et le code d'activation de votre compte :
+                            </p>
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8f9fa; border-radius:6px; padding:20px; margin:20px 0;">
+                                <tr>
+                                    <td>
+                                        <p style="margin:0 0 12px 0; color:#333333;">
+                                            <strong style="color:#38414a;">Connexion (téléphone) :</strong><br>
+                                            <span style="color:#555555;">{{TEL}}</span>
+                                        </p>
+                                        <p style="margin:0 0 12px 0; color:#333333;">
+                                            <strong style="color:#38414a;">Email :</strong><br>
+                                            <span style="color:#555555;">{{EMAIL}}</span>
+                                        </p>
+                                        <p style="margin:0 0 12px 0; color:#333333;">
+                                            <strong style="color:#38414a;">Mot de passe :</strong><br>
+                                            <span style="color:#555555;">{{PASSWORD}}</span>
+                                        </p>
+                                        <p style="margin:0; color:#333333;">
+                                            <strong style="color:#38414a;">Code d'activation (OTP) :</strong><br>
+                                            <span style="font-size:24px; font-weight:bold; color:#38414a; letter-spacing:4px;">{{OTP}}</span>
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin:20px 0 0 0; color:#555555;">
+                                Utilisez votre numéro de téléphone ou votre email comme identifiant de connexion. Le code OTP expire dans 10 minutes. Conservez ces informations en lieu sûr.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="background-color:#f8f9fa; padding:20px; border-radius:0 0 8px 8px; color:#888888; font-size:13px;">
+                            <p style="margin:0;">&copy; {{ANNEE}} Authentiq. Tous droits réservés.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
