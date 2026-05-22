@@ -189,35 +189,129 @@
     min-width: 200px;
     max-width: 220px;
 }
-.report-datepicker[readonly] {
+/* Flatpickr — thème sombre Authentiq (rapports) */
+.report-app .flatpickr-input.form-control,
+.report-app input.report-datepicker[readonly] {
     cursor: pointer;
-    background-color: transparent !important;
+    background-color: rgba(26, 30, 42, 0.55) !important;
+    color: #e8ecf4 !important;
 }
-.report-app .flatpickr-calendar {
-    background: #1e2230;
-    border: 1px solid #40465e;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+.report-app .flatpickr-input.form-control:focus,
+.report-app input.report-datepicker[readonly]:focus {
+    border-color: #0eedee !important;
+    box-shadow: 0 0 0 1px rgba(14, 237, 238, 0.25);
 }
+
+.report-app .flatpickr-calendar,
+.report-flatpickr-dark.flatpickr-calendar {
+    background: #2e3344;
+    border: 2px solid #40465e;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.report-app .flatpickr-months,
+.report-flatpickr-dark .flatpickr-months {
+    background: #2e3344;
+    border-bottom: 1px solid #40465e;
+}
+
 .report-app .flatpickr-months .flatpickr-month,
+.report-flatpickr-dark .flatpickr-months .flatpickr-month,
 .report-app .flatpickr-current-month .flatpickr-monthDropdown-months,
+.report-flatpickr-dark .flatpickr-current-month .flatpickr-monthDropdown-months,
 .report-app .flatpickr-current-month input.cur-year,
-.report-app .report-app .flatpickr-weekday,
-.report-app span.flatpickr-weekday {
+.report-flatpickr-dark .flatpickr-current-month input.cur-year {
+    color: #e8ecf4;
+    background: #2e3344;
+}
+
+.report-app .flatpickr-current-month .flatpickr-monthDropdown-months,
+.report-flatpickr-dark .flatpickr-current-month .flatpickr-monthDropdown-months {
+    border: 1px solid #40465e;
+    border-radius: 8px;
+}
+
+.report-app span.flatpickr-weekday,
+.report-flatpickr-dark span.flatpickr-weekday {
+    color: #8b93a8;
+    font-weight: 600;
+}
+
+.report-app .flatpickr-weeks,
+.report-flatpickr-dark .flatpickr-weeks {
+    background: #2e3344;
+}
+
+.report-app .flatpickr-day,
+.report-flatpickr-dark .flatpickr-day {
     color: #e8ecf4;
 }
-.report-app .flatpickr-day {
-    color: #c8cdd8;
-}
+
 .report-app .flatpickr-day:hover,
-.report-app .flatpickr-day:focus {
-    background: rgba(14, 237, 238, 0.2);
+.report-app .flatpickr-day:focus,
+.report-flatpickr-dark .flatpickr-day:hover,
+.report-flatpickr-dark .flatpickr-day:focus {
+    background: rgba(14, 237, 238, 0.15);
     border-color: rgba(14, 237, 238, 0.35);
+    color: #e8ecf4;
 }
-.report-app .flatpickr-day.today {
+
+.report-app .flatpickr-day.today,
+.report-flatpickr-dark .flatpickr-day.today {
     border-color: #0eedee;
 }
-.report-app .flatpickr-day.selected {
+
+.report-app .flatpickr-day.selected,
+.report-app .flatpickr-day.startRange,
+.report-app .flatpickr-day.endRange,
+.report-flatpickr-dark .flatpickr-day.selected,
+.report-flatpickr-dark .flatpickr-day.startRange,
+.report-flatpickr-dark .flatpickr-day.endRange {
     background: #0eedee;
     border-color: #0eedee;
-    color: #12151f;
+    color: #1a1e2a;
+    font-weight: 600;
+}
+
+.report-app .flatpickr-day.flatpickr-disabled,
+.report-app .flatpickr-day.prevMonthDay,
+.report-app .flatpickr-day.nextMonthDay,
+.report-flatpickr-dark .flatpickr-day.flatpickr-disabled,
+.report-flatpickr-dark .flatpickr-day.prevMonthDay,
+.report-flatpickr-dark .flatpickr-day.nextMonthDay {
+    color: #6b7289;
+}
+
+.report-app .flatpickr-months .flatpickr-prev-month,
+.report-app .flatpickr-months .flatpickr-next-month,
+.report-flatpickr-dark .flatpickr-months .flatpickr-prev-month,
+.report-flatpickr-dark .flatpickr-months .flatpickr-next-month {
+    fill: #e8ecf4;
+    color: #e8ecf4;
+}
+
+.report-app .flatpickr-months .flatpickr-prev-month:hover svg,
+.report-app .flatpickr-months .flatpickr-next-month:hover svg,
+.report-flatpickr-dark .flatpickr-months .flatpickr-prev-month:hover svg,
+.report-flatpickr-dark .flatpickr-months .flatpickr-next-month:hover svg {
+    fill: #0eedee;
+}
+
+.report-app .flatpickr-time,
+.report-flatpickr-dark .flatpickr-time {
+    background: #2e3344;
+    border-top: 1px solid #40465e;
+}
+
+.report-app .flatpickr-time input,
+.report-flatpickr-dark .flatpickr-time input {
+    color: #e8ecf4;
+    background: #1a1e2a;
+}
+
+.report-app .flatpickr-time .flatpickr-time-separator,
+.report-flatpickr-dark .flatpickr-time .flatpickr-time-separator {
+    color: #8b93a8;
 }

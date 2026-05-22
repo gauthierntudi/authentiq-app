@@ -359,6 +359,12 @@
             defaultTo = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         }
 
+        const tagDarkCalendar = (_, __, instance) => {
+            if (instance?.calendarContainer) {
+                instance.calendarContainer.classList.add('report-flatpickr-dark');
+            }
+        };
+
         const commonOpts = {
             locale,
             dateFormat: 'Y-m-d',
@@ -366,6 +372,8 @@
             altFormat: 'd/m/Y',
             allowInput: false,
             disableMobile: true,
+            onReady: tagDarkCalendar,
+            onOpen: tagDarkCalendar,
         };
 
         if (dateFromEl) {

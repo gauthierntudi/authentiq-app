@@ -12,7 +12,7 @@
     <link href="assets/css/vendor.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
     <link href="{{ asset('assets/css/authentiq-modals.css') }}" rel="stylesheet" type="text/css" />
-    <link href="{{ asset('assets/css/authentiq-reports.css') }}" rel="stylesheet" type="text/css" />
+    <link href="{{ asset('assets/css/authentiq-reports.css') }}?v={{ @filemtime(public_path('assets/css/authentiq-reports.css')) }}" rel="stylesheet" type="text/css" />
     <link href="assets/vendor/flatpickr/flatpickr.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
