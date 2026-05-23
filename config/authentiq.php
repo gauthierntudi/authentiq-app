@@ -77,6 +77,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Changement photo client mobile (même personne + présence physique)
+    |--------------------------------------------------------------------------
+    */
+    'face_liveness_enabled' => filter_var(env('AUTHENTIQ_FACE_LIVENESS_ENABLED', false), FILTER_VALIDATE_BOOL),
+    'face_liveness_s3_bucket' => env('AUTHENTIQ_FACE_LIVENESS_S3_BUCKET', env('AWS_BUCKET')),
+    'face_liveness_s3_prefix' => env('AUTHENTIQ_FACE_LIVENESS_S3_PREFIX', 'face-liveness/'),
+    'face_liveness_min_confidence' => (float) env('AUTHENTIQ_FACE_LIVENESS_MIN_CONFIDENCE', 90),
+    'photo_verification_ttl_minutes' => (int) env('AUTHENTIQ_PHOTO_VERIFICATION_TTL_MINUTES', 10),
+    'photo_presence_min_frames' => (int) env('AUTHENTIQ_PHOTO_PRESENCE_MIN_FRAMES', 3),
+    'cognito_identity_pool_id' => env('AWS_COGNITO_IDENTITY_POOL_ID'),
+
+    /*
+    |--------------------------------------------------------------------------
     | API mobile client (Flutter) — durée des tokens Bearer
     |--------------------------------------------------------------------------
     */

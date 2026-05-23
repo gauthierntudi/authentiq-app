@@ -23,7 +23,12 @@ Authentification staff (agents) : session cookie — routes `/api/*` avec `auth.
 
 | Méthode | Route | Description |
 |---------|-------|-------------|
-| GET | `/me` | Profil client |
+| GET | `/me` | Profil client (`can_edit_profile`, `kyc_status`, `photo_url`) |
+| PUT | `/me` | Modifier profil (bloqué si KYC `approved`) |
+| GET | `/me/photo` | Image profil (Bearer) |
+| POST | `/me/photo/verification/start` | Démarre vérification (multi-selfies natifs) |
+| POST | `/me/photo/verification/presence` | Selfies en direct + CompareFaces vs photo actuelle → `photo_verification_token` |
+| POST | `/me/photo` | Nouvelle photo (`photo`, `photo_verification_token`) — CompareFaces obligatoire |
 | POST | `/logout` | Révoque les tokens |
 | GET | `/documents` | Documents encodés du client |
 | POST | `/documents/verify` | Scan QR (`numero`) — propriétaire ou avec autorisation |

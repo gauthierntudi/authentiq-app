@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\EncodageApiController;
 use App\Http\Controllers\Api\EncodageWorkflowApiController;
 use App\Http\Controllers\Api\GeoApiController;
 use App\Http\Controllers\Api\Mobile\ClientAuthApiController as MobileClientAuthApiController;
+use App\Http\Controllers\Api\Mobile\ClientPhotoApiController as MobileClientPhotoApiController;
 use App\Http\Controllers\Api\Mobile\ClientDocumentApiController as MobileClientDocumentApiController;
 use App\Http\Controllers\Api\Mobile\ClientKycApiController as MobileClientKycApiController;
 use App\Http\Controllers\Api\Mobile\ClientNotificationApiController as MobileClientNotificationApiController;
@@ -36,6 +37,9 @@ Route::prefix('mobile/client')->group(function () {
         Route::get('/me', [MobileClientAuthApiController::class, 'me']);
         Route::put('/me', [MobileClientAuthApiController::class, 'updateProfile']);
         Route::get('/me/photo', [MobileClientAuthApiController::class, 'photo']);
+        Route::post('/me/photo/verification/start', [MobileClientPhotoApiController::class, 'startVerification']);
+        Route::post('/me/photo/verification/presence', [MobileClientPhotoApiController::class, 'verifyPresence']);
+        Route::post('/me/photo', [MobileClientPhotoApiController::class, 'updatePhoto']);
         Route::post('/logout', [MobileClientAuthApiController::class, 'logout']);
 
         Route::get('/kyc', [MobileClientKycApiController::class, 'status']);

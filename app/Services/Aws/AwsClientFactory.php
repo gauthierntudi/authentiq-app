@@ -18,7 +18,7 @@ class AwsClientFactory
     }
 
     /** @return array<string, mixed> */
-    private static function credentials(): array
+    public static function credentialsArray(): array
     {
         return [
             'version' => 'latest',
@@ -28,6 +28,12 @@ class AwsClientFactory
                 'secret' => config('services.ses.secret'),
             ],
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function credentials(): array
+    {
+        return self::credentialsArray();
     }
 
     public static function textract(): TextractClient
