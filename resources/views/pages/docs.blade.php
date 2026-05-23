@@ -275,6 +275,13 @@
                                             <label for="docValidite" class="form-label">Validité</label>
                                         </div>
                                         <div class="form-floating mb-3">
+                                            <select class="form-select" id="docOwnership" required>
+                                                <option value="single">Single (un seul client)</option>
+                                                <option value="multiple">Multiple (plusieurs clients)</option>
+                                            </select>
+                                            <label for="docOwnership" class="form-label">Ownership</label>
+                                        </div>
+                                        <div class="form-floating mb-3">
                                             <input type="number" class="form-control" id="docDuree" value="0" min="0">
                                             <label for="docDuree" class="form-label">Durée (mois)</label>
                                         </div>

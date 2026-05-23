@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Encodage extends Model
@@ -70,5 +71,17 @@ class Encodage extends Model
     public function pages(): HasMany
     {
         return $this->hasMany(EncodagePage::class, 'id_encodage');
+    }
+
+    public function associatedClients(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Client::class,
+            'ENCODAGE_CLIENTS',
+            'id_encodage',
+            'id_client',
+            'id_encodage',
+            'id_client',
+        )->withPivot('created_at');
     }
 }

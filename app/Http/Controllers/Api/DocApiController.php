@@ -14,7 +14,7 @@ class DocApiController extends Controller
     {
         $docs = Doc::query()
             ->orderBy('nom_doc')
-            ->get(['id_doc', 'nom_doc', 'type_doc', 'montant', 'duree', 'validite']);
+            ->get(['id_doc', 'nom_doc', 'type_doc', 'montant', 'duree', 'validite', 'ownership']);
 
         return response()->json(['status' => 'success', 'data' => $docs]);
     }
@@ -29,6 +29,7 @@ class DocApiController extends Controller
             'montant' => 'nullable|numeric|min:0',
             'duree' => 'nullable|integer|min:0',
             'validite' => 'required|in:court,moyen,long',
+            'ownership' => 'required|in:single,multiple',
         ]);
 
         if ($validator->fails()) {
@@ -51,6 +52,7 @@ class DocApiController extends Controller
                 'montant' => $data['montant'] ?? 0,
                 'duree' => $duree,
                 'validite' => $data['validite'],
+                'ownership' => $data['ownership'],
             ];
 
             if ($id > 0) {

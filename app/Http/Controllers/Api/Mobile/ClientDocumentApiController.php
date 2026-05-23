@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Encodage;
 use App\Services\DocumentStorage;
 use App\Services\DocumentVerifyAuthorizationService;
+use App\Services\EncodageClientAssociationService;
 use App\Support\CurrentClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class ClientDocumentApiController extends Controller
     public function __construct(
         private DocumentVerifyAuthorizationService $verifyAuth,
         private DocumentStorage $storage,
+        private EncodageClientAssociationService $clientAssociation,
     ) {}
 
     /** Liste des documents encodés pour le client connecté. */
@@ -27,14 +29,19 @@ class ClientDocumentApiController extends Controller
     {
         $client = CurrentClient::get();
 
+        $clientId = (int) $client->id_client;
+
         $items = Encodage::query()
             ->with(['doc', 'commune'])
-            ->where('id_client', $client->id_client)
             ->whereIn('status', ['complete', 'expired'])
+            ->where(function ($q) use ($clientId) {
+                $q->where('id_client', $clientId)
+                    ->orWhereHas('associatedClients', fn ($q2) => $q2->where('CLIENTS.id_client', $clientId));
+            })
             ->orderByDesc('id_encodage')
             ->limit(200)
             ->get()
-            ->map(fn (Encodage $e) => $this->encodagePayload($e));
+            ->map(fn (Encodage $e) => $this->encodagePayload($e, $client));
 
         return response()->json(['status' => 'success', 'documents' => $items]);
     }
@@ -46,7 +53,7 @@ class ClientDocumentApiController extends Controller
 
         $items = $this->verifyAuth->listEncodagesSharedWith($client)
             ->map(function (Encodage $e) {
-                $payload = $this->encodagePayload($e, detailed: true);
+                $payload = $this->encodagePayload($e, $client, detailed: true);
                 $payload['is_owner'] = false;
                 $payload['owner_nom'] = $e->client?->nom_complet;
 
@@ -88,12 +95,14 @@ class ClientDocumentApiController extends Controller
             ], 403);
         }
 
-        $isOwner = (int) $encodage->id_client === (int) $client->id_client;
+        $isOwner = $this->clientAssociation->isClientAssociated($encodage, (int) $client->id_client);
+        $isPrimaryOwner = $this->clientAssociation->isPrimaryOwner($encodage, (int) $client->id_client);
 
         return response()->json([
             'status' => 'success',
             'is_owner' => $isOwner,
-            'document' => $this->encodagePayload($encodage, detailed: true),
+            'is_primary_owner' => $isPrimaryOwner,
+            'document' => $this->encodagePayload($encodage, $client, detailed: true),
         ]);
     }
 
@@ -141,7 +150,7 @@ class ClientDocumentApiController extends Controller
         $data = $validator->validated();
         $encodage = Encodage::query()->find((int) $data['id_encodage']);
 
-        if (! $encodage || (int) $encodage->id_client !== (int) $owner->id_client) {
+        if (! $encodage || ! $this->clientAssociation->isPrimaryOwner($encodage, (int) $owner->id_client)) {
             return response()->json(['status' => 'error', 'message' => 'Document introuvable ou non autorisé.'], 404);
         }
 
@@ -190,7 +199,7 @@ class ClientDocumentApiController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function encodagePayload(Encodage $encodage, bool $detailed = false): array
+    private function encodagePayload(Encodage $encodage, ?Client $viewer = null, bool $detailed = false): array
     {
         $page = $encodage->relationLoaded('pages')
             ? $encodage->pages->sortBy('page_number')->first()
@@ -208,6 +217,11 @@ class ClientDocumentApiController extends Controller
             'verify_url' => $encodage->numero ? url('/verify/'.$encodage->numero) : null,
             'qr_url' => $this->storage->url($encodage->qr_path),
         ];
+
+        if ($viewer) {
+            $payload['is_owner'] = $this->clientAssociation->isClientAssociated($encodage, (int) $viewer->id_client);
+            $payload['is_primary_owner'] = $this->clientAssociation->isPrimaryOwner($encodage, (int) $viewer->id_client);
+        }
 
         if ($detailed) {
             $payload['affectation'] = $encodage->affectation ?: $encodage->commune?->nom;

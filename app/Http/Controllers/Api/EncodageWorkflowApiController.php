@@ -13,6 +13,7 @@ use App\Services\ClientDuplicateGuard;
 use App\Services\ClientOnboardingService;
 use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
+use App\Services\EncodageClientAssociationService;
 use App\Services\EncodageQrService;
 use App\Services\OtpService;
 use App\Services\RekognitionService;
@@ -35,6 +36,7 @@ class EncodageWorkflowApiController extends Controller
         private RekognitionService $rekognition,
         private ClientPhotoStorage $clientPhotos,
         private ClientDuplicateGuard $duplicateGuard,
+        private EncodageClientAssociationService $clientAssociation,
     ) {}
 
     private function authUser(): User|JsonResponse
@@ -92,7 +94,7 @@ class EncodageWorkflowApiController extends Controller
 
         $docs = Doc::query()
             ->orderBy('nom_doc')
-            ->get(['id_doc', 'nom_doc', 'type_doc', 'montant', 'duree']);
+            ->get(['id_doc', 'nom_doc', 'type_doc', 'montant', 'duree', 'ownership']);
 
         return response()->json($docs);
     }
@@ -255,30 +257,43 @@ class EncodageWorkflowApiController extends Controller
         }
 
         try {
-            $clientId = (int) $request->input('clientId', 0);
+            $clientIds = $this->parseClientIdsFromRequest($request);
+            $singleClientId = (int) $request->input('clientId', 0);
             $requiresOtp = false;
-            $message = 'Client sauvegardé.';
+            $message = 'Client(s) sauvegardé(s).';
+            $lastClientId = null;
 
-            if ($clientId > 0) {
-                $client = Client::query()->find($clientId);
-                if (! $client) {
-                    return response()->json(['status' => 'error', 'message' => 'Client introuvable.'], 404);
+            if ($clientIds === [] && $singleClientId > 0) {
+                $clientIds = [$singleClientId];
+            }
+
+            if ($clientIds !== []) {
+                foreach ($clientIds as $cid) {
+                    $client = Client::query()->find($cid);
+                    if (! $client) {
+                        return response()->json(['status' => 'error', 'message' => 'Client introuvable.'], 404);
+                    }
+
+                    if ($user->role !== 'admin'
+                        && ((int) $client->id_province !== (int) $user->id_province
+                            || (int) $client->id_ville !== (int) $user->id_ville)) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => 'Ce client n\'appartient pas à votre province/ville.',
+                        ], 403);
+                    }
+
+                    if (! $client->is_active) {
+                        $requiresOtp = true;
+                        $message = $this->otpMessageAfterIssue($this->otpService->issueForClient($client));
+                    }
                 }
 
-                if ($user->role !== 'admin'
-                    && ((int) $client->id_province !== (int) $user->id_province
-                        || (int) $client->id_ville !== (int) $user->id_ville)) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Ce client n\'appartient pas à votre province/ville.',
-                    ], 403);
-                }
+                $this->clientAssociation->syncClients($encodage, $clientIds, $user);
+                $lastClientId = $clientIds[0];
 
-                $encodage->update(['id_client' => $clientId]);
-
-                if (! $client->is_active) {
-                    $requiresOtp = true;
-                    $message = $this->otpMessageAfterIssue($this->otpService->issueForClient($client));
+                if ($error = $this->clientAssociation->validateForDoc($encodage->fresh())) {
+                    return response()->json(['status' => 'error', 'message' => $error], 422);
                 }
             } else {
                 $nom = trim((string) $request->input('clientNom', ''));
@@ -340,15 +355,30 @@ class EncodageWorkflowApiController extends Controller
                     'photo' => $this->clientPhotos->store($client, $request->file('clientPhoto')),
                 ]);
 
-                $clientId = $client->id_client;
-                $encodage->update(['id_client' => $clientId]);
+                $newClientId = (int) $client->id_client;
+                $mergedIds = array_values(array_unique(array_merge($clientIds, [$newClientId])));
+                $this->clientAssociation->syncClients($encodage, $mergedIds, $user);
+                $lastClientId = $newClientId;
                 $requiresOtp = true;
                 $message = $this->otpMessageAfterIssue($this->clientOnboarding->onboardStaffCreatedClient($client->fresh()));
+
+                if ($error = $this->clientAssociation->validateForDoc($encodage->fresh())) {
+                    return response()->json(['status' => 'error', 'message' => $error], 422);
+                }
             }
+
+            if ($lastClientId === null) {
+                return response()->json(['status' => 'error', 'message' => 'Associez au moins un client.']);
+            }
+
+            $encodage->refresh();
+            $associatedClients = $this->formatAssociatedClientsPayload($encodage);
 
             return response()->json([
                 'status' => 'success',
-                'clientId' => $clientId,
+                'clientId' => $lastClientId,
+                'clientIds' => $this->clientAssociation->associatedClientIds($encodage),
+                'associated_clients' => $associatedClients,
                 'requires_otp' => $requiresOtp,
                 'message' => $message,
             ]);
@@ -409,6 +439,12 @@ class EncodageWorkflowApiController extends Controller
             'date_expiration' => $request->input('docDateExpiration') ?: null,
         ]);
 
+        $encodage->refresh();
+
+        if ($error = $this->clientAssociation->validateForDoc($encodage)) {
+            return response()->json(['status' => 'error', 'message' => $error], 422);
+        }
+
         return response()->json(['status' => 'success', 'message' => 'Document sauvegardé.']);
     }
 
@@ -465,8 +501,10 @@ class EncodageWorkflowApiController extends Controller
                     $encodage->client?->photoCacheVersion(),
                 ),
             ],
+            'associated_clients' => $this->formatAssociatedClientsPayload($encodage),
             'document' => [
                 'nom_doc' => $encodage->doc?->nom_doc,
+                'ownership' => $encodage->doc?->ownership,
             ],
             'qr' => $qr,
         ]);
@@ -495,8 +533,8 @@ class EncodageWorkflowApiController extends Controller
             return $blocked;
         }
 
-        if (! $encodage->id_client) {
-            return response()->json(['status' => 'error', 'message' => 'Client requis avant finalisation.']);
+        if ($error = $this->clientAssociation->validateForFinalize($encodage)) {
+            return response()->json(['status' => 'error', 'message' => $error], 422);
         }
 
         if (! $encodage->id_doc) {
@@ -652,8 +690,60 @@ class EncodageWorkflowApiController extends Controller
                 'date_expiration' => $encodage->date_expiration,
                 'page_count' => $encodage->page_count,
             ],
+            'associated_clients' => $this->formatAssociatedClientsPayload($encodage),
             'pages' => $pages,
         ]);
+    }
+
+    /** @return list<int> */
+    private function parseClientIdsFromRequest(Request $request): array
+    {
+        $raw = $request->input('clientIds');
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+
+            return is_array($decoded)
+                ? array_values(array_unique(array_filter(array_map('intval', $decoded), fn ($id) => $id > 0)))
+                : [];
+        }
+
+        if (is_array($raw)) {
+            return array_values(array_unique(array_filter(array_map('intval', $raw), fn ($id) => $id > 0)));
+        }
+
+        return [];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function formatAssociatedClientsPayload(Encodage $encodage): array
+    {
+        $ids = $this->clientAssociation->associatedClientIds($encodage);
+        if ($ids === []) {
+            return [];
+        }
+
+        $clients = Client::query()
+            ->whereIn('id_client', $ids)
+            ->get(['id_client', 'nom_complet', 'tel', 'email', 'is_active'])
+            ->keyBy('id_client');
+
+        $payload = [];
+        foreach ($ids as $id) {
+            $client = $clients->get($id);
+            if (! $client) {
+                continue;
+            }
+            $payload[] = [
+                'id_client' => $client->id_client,
+                'nom_complet' => $client->nom_complet,
+                'tel' => $client->tel,
+                'email' => $client->email,
+                'is_active' => (bool) $client->is_active,
+                'is_primary' => (int) $encodage->id_client === (int) $client->id_client,
+            ];
+        }
+
+        return $payload;
     }
 
     public function deletePage(Request $request): JsonResponse

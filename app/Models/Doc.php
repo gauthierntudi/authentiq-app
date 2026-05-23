@@ -18,6 +18,7 @@ class Doc extends Model
         'montant',
         'duree',
         'validite',
+        'ownership',
     ];
 
     protected $casts = [

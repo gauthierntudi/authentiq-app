@@ -8,13 +8,13 @@ use App\Models\Encodage;
 
 class DocumentVerifyAuthorizationService
 {
+    public function __construct(
+        private EncodageClientAssociationService $clientAssociation,
+    ) {}
+
     public function canClientViewEncodage(Client $viewer, Encodage $encodage): bool
     {
-        if (! $encodage->id_client) {
-            return false;
-        }
-
-        if ((int) $encodage->id_client === (int) $viewer->id_client) {
+        if ($this->clientAssociation->isClientAssociated($encodage, (int) $viewer->id_client)) {
             return true;
         }
 

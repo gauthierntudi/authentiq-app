@@ -27,7 +27,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     d.type_doc || '',
                     d.montant || 0,
                     d.duree || 0,
-                    d.validite || 'court'
+                    d.validite || 'court',
+                    d.ownership || 'single'
                 ]);
 
                 if(gridDocs) {
@@ -46,6 +47,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             },
                             { name: "Validité", width: "100px" },
                             {
+                                name: "Ownership",
+                                width: "110px",
+                                formatter: cell => cell === 'multiple' ? 'Multiple' : 'Single'
+                            },
+                            {
                                 name: "Actions",
                                 width: "150px",
                                 formatter: function(cell, row) {
@@ -55,9 +61,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                     const docMontant = row.cells[3].data || 0;
                                     const docDuree = row.cells[4].data || 0;
                                     const docValidite = (row.cells[5].data || 'court').toString();
+                                    const docOwnership = (row.cells[6].data || 'single').toString();
 
                                     return gridjs.html(`
-                                        <button class="btn btn-secondary btn-icon me-1 border-radius" onclick="editDoc(${docId}, '${docNom}', '${docType}', ${docMontant}, ${docDuree}, '${docValidite}')">
+                                        <button class="btn btn-secondary btn-icon me-1 border-radius" onclick="editDoc(${docId}, '${docNom}', '${docType}', ${docMontant}, ${docDuree}, '${docValidite}', '${docOwnership}')">
                                             <iconify-icon icon="solar:pen-bold-duotone" style="font-size:1.4em"></iconify-icon>
                                         </button>
                                         <button class="btn btn-danger btn-icon border-radius" onclick="deleteDoc(${docId})">
@@ -92,8 +99,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const illimite = document.getElementById('docIllimite').checked;
         const duree = illimite ? 0 : parseInt(document.getElementById('docDuree').value) || 0;
         const validite = document.getElementById('docValidite').value;
+        const ownership = document.getElementById('docOwnership').value;
 
-        if(!nom || !type || !validite){
+        if(!nom || !type || !validite || !ownership){
             iziToast.error({ title:'Erreur', message:'Veuillez remplir tous les champs obligatoires.' });
             return;
         }
@@ -108,6 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('montant', montant);
         formData.append('duree', duree);
         formData.append('validite', validite);
+        formData.append('ownership', ownership);
 
         fetch('/api/docs/save', { method:'POST', headers: apiHeaders(), body:formData })
         .then(res=>res.json())
@@ -133,17 +142,19 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('docMontant').value=0;
             document.getElementById('docDuree').value=0;
             document.getElementById('docValidite').value='court';
+            document.getElementById('docOwnership').value='single';
             document.getElementById('docIllimite').checked=false;
         });
     });
 
-    window.editDoc = function(id, nom, type, montant, duree, validite){
+    window.editDoc = function(id, nom, type, montant, duree, validite, ownership){
         document.getElementById('docId').value = id;
         document.getElementById('docNom').value = nom;
         document.getElementById('docType').value = type;
         document.getElementById('docMontant').value = montant;
         document.getElementById('docDuree').value = duree;
         document.getElementById('docValidite').value = validite;
+        document.getElementById('docOwnership').value = ownership || 'single';
         document.getElementById('docIllimite').checked = duree === 0;
 
         document.getElementById('docModalTitle').textContent = "Modifier le document";
@@ -174,6 +185,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('docMontant').value=0;
         document.getElementById('docDuree').value=0;
         document.getElementById('docValidite').value='court';
+        document.getElementById('docOwnership').value='single';
         document.getElementById('docIllimite').checked=false;
         document.getElementById('docModalTitle').textContent = "Ajouter un nouveau document";
         docModal.show();

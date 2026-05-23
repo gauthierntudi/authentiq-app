@@ -17,6 +17,8 @@ let currentStep = 1;
 let capturedImageBlob = null;
 let encodageId = null;
 let clientId = null;
+/** @type {{ id_client: number, nom_complet: string, tel?: string, email?: string, is_primary?: boolean }[]} */
+let associatedClients = [];
 let videoStream = null;
 let faceVideoStream = null;
 let faceCaptureBlob = null;
@@ -56,6 +58,7 @@ let encNewClientPreviewUrl = null;
 document.addEventListener('DOMContentLoaded', function () {
     initializeCamera();
     loadDocumentTypes();
+    renderAssociatedClientsChips();
     setupEventListeners();
     setupClientPhotoSearch();
     setupEncodageNewClientPhoto();
@@ -253,6 +256,114 @@ function bindStepperNavigation() {
     });
 }
 
+function getSelectedDocOwnership() {
+    const select = document.getElementById('docType');
+    if (!select?.value) return null;
+    const option = select.options[select.selectedIndex];
+    return option?.dataset?.ownership || 'single';
+}
+
+function setAssociatedClientsFromServer(list) {
+    associatedClients = (list || []).map((c) => ({
+        id_client: Number(c.id_client),
+        nom_complet: c.nom_complet || `Client #${c.id_client}`,
+        tel: c.tel || '',
+        email: c.email || '',
+        is_primary: Boolean(c.is_primary),
+    }));
+    const primary = associatedClients.find((c) => c.is_primary) || associatedClients[0];
+    clientId = primary?.id_client || null;
+    const clientIdEl = document.getElementById('clientId');
+    if (clientIdEl) clientIdEl.value = clientId || '';
+    renderAssociatedClientsChips();
+    updateAssociatedClientsHint();
+}
+
+function renderAssociatedClientsChips() {
+    const host = document.getElementById('associatedClientsChips');
+    if (!host) return;
+
+    if (associatedClients.length === 0) {
+        host.innerHTML = '<span class="text-muted small">Aucun client associé pour le moment.</span>';
+        return;
+    }
+
+    host.innerHTML = associatedClients.map((c) => `
+        <span class="badge bg-secondary d-inline-flex align-items-center gap-1 py-2 px-3" style="border-radius:12px;font-size:0.85rem;">
+            <span>${escapeHtml(c.nom_complet)}${c.is_primary ? ' <em class="opacity-75">(principal)</em>' : ''}</span>
+            <button type="button" class="btn-close btn-close-white btn-sm" style="font-size:0.55rem;"
+                data-remove-associated-client="${c.id_client}"
+                aria-label="Retirer ${escapeAttr(c.nom_complet)}"></button>
+        </span>`).join('');
+
+    host.querySelectorAll('[data-remove-associated-client]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            removeAssociatedClient(parseInt(btn.getAttribute('data-remove-associated-client'), 10));
+        });
+    });
+}
+
+function updateAssociatedClientsHint() {
+    const hint = document.getElementById('associatedClientsHint');
+    if (!hint) return;
+
+    const ownership = getSelectedDocOwnership();
+    if (ownership === 'multiple') {
+        hint.textContent = 'Propriété multiple : associez au moins deux clients à ce document (un seul encodage).';
+    } else if (ownership === 'single') {
+        hint.textContent = 'Propriété single : un seul client peut être associé à ce document.';
+    } else {
+        hint.textContent = 'Ajoutez un ou plusieurs clients. Le type de document (étape suivante) détermine si un seul ou plusieurs clients sont autorisés.';
+    }
+}
+
+function canAddMoreClients() {
+    const ownership = getSelectedDocOwnership();
+    if (ownership === 'single' && associatedClients.length >= 1) {
+        iziToast.warning({ message: 'Ce type de document n\'accepte qu\'un seul client (ownership single).' });
+        return false;
+    }
+    return true;
+}
+
+function addAssociatedClient(client) {
+    if (!client?.id_client) return;
+    const id = Number(client.id_client);
+    if (associatedClients.some((c) => c.id_client === id)) {
+        iziToast.info({ message: 'Ce client est déjà dans la liste.' });
+        return;
+    }
+    if (!canAddMoreClients()) return;
+
+    associatedClients.push({
+        id_client: id,
+        nom_complet: client.nom_complet || `Client #${id}`,
+        tel: client.tel || '',
+        email: client.email || '',
+        is_primary: associatedClients.length === 0,
+    });
+
+    if (associatedClients.length === 1) {
+        clientId = id;
+        document.getElementById('clientId').value = String(id);
+    }
+
+    renderAssociatedClientsChips();
+}
+
+function removeAssociatedClient(id) {
+    associatedClients = associatedClients.filter((c) => c.id_client !== id);
+    if (associatedClients.length > 0) {
+        associatedClients[0].is_primary = true;
+        clientId = associatedClients[0].id_client;
+        document.getElementById('clientId').value = String(clientId);
+    } else {
+        clientId = null;
+        document.getElementById('clientId').value = '';
+    }
+    renderAssociatedClientsChips();
+}
+
 function applyResumedEncodage(data) {
     const enc = data.encodage;
     const pages = data.pages || [];
@@ -260,9 +371,21 @@ function applyResumedEncodage(data) {
     setEncodageStatus(enc.status);
 
     encodageId = enc.id_encodage;
-    clientId = enc.id_client || null;
     document.getElementById('encodageId').value = encodageId;
-    if (clientId) document.getElementById('clientId').value = clientId;
+
+    if (data.associated_clients?.length) {
+        setAssociatedClientsFromServer(data.associated_clients);
+    } else if (enc.id_client) {
+        setAssociatedClientsFromServer([{
+            id_client: enc.id_client,
+            nom_complet: 'Client',
+            is_primary: true,
+        }]);
+    } else {
+        associatedClients = [];
+        clientId = null;
+        renderAssociatedClientsChips();
+    }
 
     if (pages.length > 0) {
         scannedPages = pages.map((p) => ({
@@ -1740,6 +1863,7 @@ function loadDocumentTypes() {
             option.dataset.montant = doc.montant;
             option.dataset.typedoc = doc.type_doc;
             option.dataset.duree = doc.duree;
+            option.dataset.ownership = doc.ownership || 'single';
             select.appendChild(option);
         });
         tryApplyPendingResume();
@@ -1764,6 +1888,20 @@ function loadDocumentInfo() {
     currentDocDuree = parseInt(option.dataset.duree || '0', 10) || 0;
     updateDateFieldsState();
     calculateExpirationDate();
+    updateAssociatedClientsHint();
+
+    const ownership = option.dataset.ownership || 'single';
+    if (ownership === 'single' && associatedClients.length > 1) {
+        iziToast.warning({
+            message: 'Ce type de document n\'accepte qu\'un client : seul le client principal est conservé.',
+            timeout: 6000,
+        });
+        associatedClients = [associatedClients[0]];
+        associatedClients[0].is_primary = true;
+        clientId = associatedClients[0].id_client;
+        document.getElementById('clientId').value = String(clientId);
+        renderAssociatedClientsChips();
+    }
 }
 
 function isDocTypeSelected() {
@@ -2021,6 +2159,7 @@ function renderClientSearchResults(clients, placeholder) {
                 select.value = String(client.id_client);
                 list.querySelectorAll('.client-search-results__item').forEach(el => el.classList.remove('is-selected'));
                 li.classList.add('is-selected');
+                addAssociatedClient(client);
             });
             list.appendChild(li);
         }
@@ -2232,8 +2371,12 @@ function performSaveClientInfo(formData, andGoNext = false) {
                 return;
             }
             if (data.status === 'success') {
-                clientId = data.clientId;
-                document.getElementById('clientId').value = clientId;
+                if (data.associated_clients?.length) {
+                    setAssociatedClientsFromServer(data.associated_clients);
+                } else if (data.clientId) {
+                    clientId = data.clientId;
+                    document.getElementById('clientId').value = clientId;
+                }
 
                 if (data.requires_otp) {
                     clientAwaitingOtp = true;
@@ -2275,12 +2418,17 @@ function saveClientInfo(andGoNext = false) {
     const clientType = document.getElementById('clientType').value;
     if (clientType === 'existing') {
         const clientSelect = document.getElementById('clientSelect');
-        if (clientSelect.value) {
-            formData.append('clientId', clientSelect.value);
-        } else {
-            iziToast.warning({ message: 'Veuillez sélectionner un client.' });
+        if (!associatedClients.length && clientSelect.value) {
+            addAssociatedClient({
+                id_client: parseInt(clientSelect.value, 10),
+                nom_complet: clientSelect.options[clientSelect.selectedIndex]?.textContent || '',
+            });
+        }
+        if (!associatedClients.length) {
+            iziToast.warning({ message: 'Ajoutez au moins un client à la liste.' });
             return;
         }
+        formData.append('clientIds', JSON.stringify(associatedClients.map((c) => c.id_client)));
         performSaveClientInfo(formData, andGoNext);
         return;
     }
@@ -2302,6 +2450,9 @@ function saveClientInfo(andGoNext = false) {
         return;
     }
     formData.append('clientPhoto', encNewClientCroppedBlob, 'client-photo.jpg');
+    if (associatedClients.length > 0) {
+        formData.append('clientIds', JSON.stringify(associatedClients.map((c) => c.id_client)));
+    }
 
     const checkFd = buildNewClientCheckFormData();
     checkClientDuplicatesFormData(checkFd)
@@ -2520,8 +2671,7 @@ function applyRecognizedClient(c) {
         select.appendChild(opt);
     }
     select.value = String(c.id_client);
-    clientId = c.id_client;
-    document.getElementById('clientId').value = clientId;
+    addAssociatedClient(c);
 }
 
 function setFaceRecognitionLoading(loading) {
@@ -2964,10 +3114,17 @@ function renderRecapitulatifHtml(data) {
             Type de document non enregistré — complétez l\'étape « Document » avant de finaliser.
            </div>`
         : '';
+    const associated = Array.isArray(data.associated_clients) ? data.associated_clients : [];
+    const multiClients = associated.length > 1;
     const photoUrl = client.photo_url || 'assets/images/user.jpg';
     const tel = client.tel || '';
     const email = client.email || '';
     const refNum = qr.numero || enc.numero || '—';
+    const clientsListHtml = multiClients
+        ? `<ul class="enc-recap-clients-list list-unstyled mb-0 mt-2">
+            ${associated.map((c) => `<li class="small">${escapeHtml(c.nom_complet || '—')}${c.is_primary ? ' <span class="text-muted">(principal)</span>' : ''}</li>`).join('')}
+           </ul>`
+        : '';
 
     const telBtn = tel
         ? `<a href="tel:${escapeAttr(tel.replace(/\s/g, ''))}" class="btn btn-sm btn-light fw-semibold enc-recap-profile__btn" style="border-radius:12px"><iconify-icon icon="solar:phone-bold"></iconify-icon><span>Appeler</span></a>`
@@ -3049,7 +3206,8 @@ function renderRecapitulatifHtml(data) {
                                 <iconify-icon icon="solar:verified-check-bold"></iconify-icon>
                             </span>
                         </div>
-                        <p class="enc-recap-profile__name">${escapeHtml(client.nom_complet || '—')}</p>
+                        <p class="enc-recap-profile__name">${escapeHtml(multiClients ? `${associated.length} clients associés` : (client.nom_complet || '—'))}</p>
+                        ${clientsListHtml}
                         <div class="enc-recap-profile__actions">
                             ${telBtn}
                             ${mailBtn}

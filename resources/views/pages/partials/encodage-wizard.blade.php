@@ -145,6 +145,13 @@
 
     <div id="step3" class="step">
         <h4><iconify-icon icon="solar:user-bold-duotone"></iconify-icon> Informations du client</h4>
+        <div id="associatedClientsSection" class="mb-4">
+            <label class="form-label">Clients associés à cet encodage</label>
+            <div id="associatedClientsChips" class="d-flex flex-wrap gap-2 mb-2" aria-live="polite"></div>
+            <p id="associatedClientsHint" class="small text-muted mb-0">
+                Ajoutez un ou plusieurs clients. Le type de document (étape suivante) détermine si un seul ou plusieurs clients sont autorisés.
+            </p>
+        </div>
         <div class="mb-4">
             <label class="form-label">Type de client</label>
             <select id="clientType" class="form-select">
