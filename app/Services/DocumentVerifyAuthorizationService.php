@@ -95,7 +95,7 @@ class DocumentVerifyAuthorizationService
         }
 
         return Encodage::query()
-            ->with(['doc', 'commune', 'client', 'pages'])
+            ->with(['doc', 'commune', 'client', 'pages', 'associatedClients:'.Client::EAGER_SELECT])
             ->whereIn('id_encodage', $encodageIds)
             ->whereIn('status', ['complete', 'expired'])
             ->orderByDesc('id_encodage')

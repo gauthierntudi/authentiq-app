@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Encodage;
+use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
 use App\Services\DocumentVerifyAuthorizationService;
 use App\Services\EncodageClientAssociationService;
@@ -22,6 +23,7 @@ class ClientDocumentApiController extends Controller
         private DocumentVerifyAuthorizationService $verifyAuth,
         private DocumentStorage $storage,
         private EncodageClientAssociationService $clientAssociation,
+        private ClientPhotoStorage $clientPhotos,
     ) {}
 
     /** Liste des documents encodés pour le client connecté. */
@@ -35,10 +37,7 @@ class ClientDocumentApiController extends Controller
             ->with([
                 'doc',
                 'commune',
-                'pages' => fn ($q) => $q
-                    ->select('id_page', 'id_encodage', 'page_number', 'file_path')
-                    ->orderBy('page_number')
-                    ->limit(1),
+                'associatedClients:'.Client::EAGER_SELECT,
             ])
             ->whereIn('status', ['complete', 'expired'])
             ->where(function ($q) use ($clientId) {
@@ -48,15 +47,7 @@ class ClientDocumentApiController extends Controller
             ->orderByDesc('id_encodage')
             ->limit(200)
             ->get()
-            ->map(function (Encodage $e) use ($client) {
-                $payload = $this->encodagePayload($e, $client);
-                $page = $e->relationLoaded('pages')
-                    ? $e->pages->sortBy('page_number')->first()
-                    : null;
-                $payload['first_page_url'] = $this->storage->url($page?->file_path);
-
-                return $payload;
-            });
+            ->map(fn (Encodage $e) => $this->documentListPayload($e, $client));
 
         return response()->json(['status' => 'success', 'documents' => $items]);
     }
@@ -67,8 +58,8 @@ class ClientDocumentApiController extends Controller
         $client = CurrentClient::get();
 
         $items = $this->verifyAuth->listEncodagesSharedWith($client)
-            ->map(function (Encodage $e) {
-                $payload = $this->encodagePayload($e, $client, detailed: true);
+            ->map(function (Encodage $e) use ($client) {
+                $payload = $this->documentListPayload($e, $client, detailed: true);
                 $payload['is_owner'] = false;
                 $payload['owner_nom'] = $e->client?->nom_complet;
 
@@ -243,6 +234,18 @@ class ClientDocumentApiController extends Controller
             $payload['client'] = $encodage->client?->nom_complet;
             $payload['first_page_url'] = $this->storage->url($page?->file_path);
         }
+
+        return $payload;
+    }
+
+    /** @return array<string, mixed> */
+    private function documentListPayload(Encodage $encodage, Client $viewer, bool $detailed = false): array
+    {
+        $payload = $this->encodagePayload($encodage, $viewer, detailed: $detailed);
+        $payload['associated_clients'] = $this->clientAssociation->clientsListForEncodage(
+            $encodage,
+            $this->clientPhotos,
+        );
 
         return $payload;
     }
