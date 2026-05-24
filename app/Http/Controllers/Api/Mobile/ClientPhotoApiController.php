@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Services\ClientPhotoStorage;
 use App\Services\ClientPhotoVerificationService;
+use App\Services\EncodageClientAssociationService;
 use App\Services\RekognitionService;
 use App\Support\CurrentClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
 
 class ClientPhotoApiController extends Controller
@@ -17,7 +20,29 @@ class ClientPhotoApiController extends Controller
         private ClientPhotoVerificationService $verification,
         private ClientPhotoStorage $photos,
         private RekognitionService $rekognition,
+        private EncodageClientAssociationService $clientAssociation,
     ) {}
+
+    /** Photo d'un client co-titulaire (Bearer token, même document requis). */
+    public function showClientPhoto(int $id): Response
+    {
+        $viewer = CurrentClient::get();
+        if (! $viewer) {
+            return response('', 401);
+        }
+
+        $client = Client::query()->find($id);
+        if (! $client || ! $client->photo) {
+            return response('', 404);
+        }
+
+        if ((int) $viewer->id_client !== $id
+            && ! $this->clientAssociation->clientsShareDocument((int) $viewer->id_client, $id)) {
+            return response('', 403);
+        }
+
+        return $this->photoResponse($client);
+    }
 
   /** Démarre la vérification de présence (selfies natifs). */
     public function startVerification(): JsonResponse
@@ -128,6 +153,19 @@ class ClientPhotoApiController extends Controller
             'message' => 'Photo de profil mise à jour.',
             'photo_url' => $photoUrl,
             'client_id' => $client->id_client,
+        ]);
+    }
+
+    private function photoResponse(Client $client): Response
+    {
+        $bytes = $this->photos->readBytes($client->photo);
+        if ($bytes === null || $bytes === '') {
+            return response('', 404);
+        }
+
+        return response($bytes, 200, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, max-age=3600',
         ]);
     }
 }

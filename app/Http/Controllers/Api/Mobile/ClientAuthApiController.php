@@ -291,12 +291,12 @@ class ClientAuthApiController extends Controller
         $client = \App\Support\CurrentClient::get();
 
         if (! $client || ! $client->photo) {
-            return redirect($this->clientPhotos->defaultUrl());
+            return response('', 404);
         }
 
         $bytes = $this->clientPhotos->readBytes($client->photo);
         if ($bytes === null || $bytes === '') {
-            return redirect($this->clientPhotos->defaultUrl());
+            return response('', 404);
         }
 
         return response($bytes, 200, [

@@ -245,6 +245,7 @@ class ClientDocumentApiController extends Controller
         $payload['associated_clients'] = $this->clientAssociation->clientsListForEncodage(
             $encodage,
             $this->clientPhotos,
+            forMobile: true,
         );
 
         return $payload;

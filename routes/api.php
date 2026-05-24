@@ -37,6 +37,8 @@ Route::prefix('mobile/client')->group(function () {
         Route::get('/me', [MobileClientAuthApiController::class, 'me']);
         Route::put('/me', [MobileClientAuthApiController::class, 'updateProfile']);
         Route::get('/me/photo', [MobileClientAuthApiController::class, 'photo']);
+        Route::get('/clients/{id}/photo', [MobileClientPhotoApiController::class, 'showClientPhoto'])
+            ->whereNumber('id');
         Route::post('/me/photo/verification/start', [MobileClientPhotoApiController::class, 'startVerification']);
         Route::post('/me/photo/verification/presence', [MobileClientPhotoApiController::class, 'verifyPresence']);
         Route::post('/me/photo', [MobileClientPhotoApiController::class, 'updatePhoto']);

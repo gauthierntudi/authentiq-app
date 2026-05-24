@@ -137,11 +137,34 @@ class EncodageClientAssociationService
         return (int) $encodage->id_client === $clientId;
     }
 
-    /**
-     * @return list<array{id_client: int, nom_complet: string, photo_url: string, is_primary: bool}>
-     */
-    public function clientsListForEncodage(Encodage $encodage, ClientPhotoStorage $photos): array
+    /** Les deux clients apparaissent sur au moins un même document finalisé. */
+    public function clientsShareDocument(int $clientIdA, int $clientIdB): bool
     {
+        if ($clientIdA === $clientIdB) {
+            return true;
+        }
+
+        return Encodage::query()
+            ->whereIn('status', ['complete', 'expired'])
+            ->where(function ($q) use ($clientIdA) {
+                $q->where('id_client', $clientIdA)
+                    ->orWhereHas('associatedClients', fn ($q2) => $q2->where('CLIENTS.id_client', $clientIdA));
+            })
+            ->where(function ($q) use ($clientIdB) {
+                $q->where('id_client', $clientIdB)
+                    ->orWhereHas('associatedClients', fn ($q2) => $q2->where('CLIENTS.id_client', $clientIdB));
+            })
+            ->exists();
+    }
+
+    /**
+     * @return list<array{id_client: int, nom_complet: string, photo_url: string|null, is_primary: bool}>
+     */
+    public function clientsListForEncodage(
+        Encodage $encodage,
+        ClientPhotoStorage $photos,
+        bool $forMobile = false,
+    ): array {
         $ids = $this->associatedClientIds($encodage);
         if ($ids === []) {
             return [];
@@ -166,16 +189,31 @@ class EncodageClientAssociationService
             $payload[] = [
                 'id_client' => (int) $client->id_client,
                 'nom_complet' => $client->nom_complet,
-                'photo_url' => $photos->photoUrl(
-                    $client->photo,
-                    $client->id_client,
-                    $client->photoCacheVersion(),
-                ),
+                'photo_url' => $this->clientPhotoUrl($client, $photos, $forMobile),
                 'is_primary' => $this->isPrimaryOwner($encodage, (int) $client->id_client),
             ];
         }
 
         return $payload;
+    }
+
+    private function clientPhotoUrl(Client $client, ClientPhotoStorage $photos, bool $forMobile): ?string
+    {
+        if (! $client->photo) {
+            return $forMobile ? null : $photos->defaultUrl();
+        }
+
+        if ($forMobile) {
+            $v = $client->photoCacheVersion() ?? time();
+
+            return url('/api/mobile/client/clients/'.$client->id_client.'/photo').'?v='.$v;
+        }
+
+        return $photos->photoUrl(
+            $client->photo,
+            $client->id_client,
+            $client->photoCacheVersion(),
+        );
     }
 
     /**
