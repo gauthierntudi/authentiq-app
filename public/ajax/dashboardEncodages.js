@@ -39,6 +39,52 @@ document.addEventListener('DOMContentLoaded', function() {
         `);
     }
 
+    function clientsCellHtml(meta) {
+        const clients = Array.isArray(meta?.clients) ? meta.clients : [];
+        const ownership = meta?.ownership || 'single';
+
+        if (clients.length <= 1) {
+            const single = clients[0] || {};
+            return clientCellHtml(single.photo_url || meta?.photo, single.nom_complet || meta?.name);
+        }
+
+        const avatars = clients.slice(0, 3).map((c) => {
+            const photo = escapeHtml(c.photo_url || '/assets/images/user.jpg');
+            return `<img src="${photo}" alt="" class="enc-table-client__photo enc-table-client__photo--stack" loading="lazy" width="32" height="32">`;
+        }).join('');
+        const extra = clients.length > 3
+            ? `<span class="enc-table-client__more">+${clients.length - 3}</span>`
+            : '';
+        const label = escapeHtml(clients.map((c) => c.nom_complet).filter(Boolean).join(', ') || meta?.name || '—');
+        const badge = ownership === 'multiple'
+            ? `<span class="enc-table-client__multi-badge">${clients.length} clients</span>`
+            : '';
+
+        return gridjs.html(`
+            <div class="enc-table-client enc-table-client--multi">
+                <div class="enc-table-client__avatars">${avatars}${extra}</div>
+                <div class="enc-table-client__text">
+                    <span class="enc-table-client__name">${label}</span>
+                    ${badge}
+                </div>
+            </div>
+        `);
+    }
+
+    function documentCellHtml(typeDoc, ownership) {
+        const label = escapeHtml(typeDoc || '—');
+        const badge = ownership === 'multiple'
+            ? '<span class="enc-table-doc__badge">Multiple</span>'
+            : '';
+
+        return gridjs.html(`
+            <div class="enc-table-doc">
+                <span class="enc-table-doc__label">${label}</span>
+                ${badge}
+            </div>
+        `);
+    }
+
     function scheduleLoadEncodages(delay = 0) {
         clearTimeout(searchDebounceTimer);
         searchDebounceTimer = setTimeout(loadEncodages, delay);
@@ -135,6 +181,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 encodageRowById = new Map(
                     response.data.map(r => [r.id_encodage, {
+                        clients: r.associated_clients || [],
+                        ownership: r.ownership || 'single',
                         photo: r.client_photo_url,
                         name: r.client_nom,
                     }]),
@@ -151,13 +199,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     {
                         name: 'Client',
-                        width: '200px',
+                        width: '220px',
                         formatter: (_, row) => {
                             const meta = encodageRowById.get(row.cells[0].data) || {};
-                            return clientCellHtml(meta.photo, meta.name);
+                            return clientsCellHtml(meta);
                         },
                     },
-                    { name: 'Document', width: '140px' },
+                    {
+                        name: 'Document',
+                        width: '160px',
+                        formatter: (_, row) => {
+                            const meta = encodageRowById.get(row.cells[0].data) || {};
+                            return documentCellHtml(row.cells[3].data, meta.ownership);
+                        },
+                    },
                     { name: 'Affectation', width: '120px' },
                     { name: 'Pages', width: '70px' },
                     { name: 'Créé le', width: '140px' },

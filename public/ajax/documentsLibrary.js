@@ -99,23 +99,47 @@
         });
     }
 
+    function clientsLine(item, compact) {
+        const clients = Array.isArray(item.associated_clients) ? item.associated_clients : [];
+        const ownership = item.ownership || 'single';
+        const count = item.clients_count || clients.length || 0;
+
+        if (clients.length > 1 || (ownership === 'multiple' && count > 1)) {
+            const names = clients.map((c) => c.nom_complet).filter(Boolean).join(', ');
+            const label = names || item.client_nom || '—';
+            return compact
+                ? `${escapeHtml(label)} · ${count} co-titulaires`
+                : `${escapeHtml(label)} · ${count} co-titulaires · ${statusLabel(item.status)} · ${item.pages_count} p.`;
+        }
+
+        const clientName = escapeHtml(item.client_nom || '—');
+        return compact
+            ? `${clientName} · ${statusLabel(item.status)}`
+            : `${clientName} · ${statusLabel(item.status)} · ${item.pages_count} p.`;
+    }
+
     function renderFileItem(item, compact) {
         const thumb = item.preview_url
             ? `<img src="${escapeHtml(item.preview_url)}" alt="" class="doc-lib-file__thumb" loading="lazy">`
             : `<span class="doc-lib-file__icon"><iconify-icon icon="${fileIcon(item.type_doc)}"></iconify-icon></span>`;
-        const sub = compact
-            ? `${escapeHtml(item.client_nom || '')} · ${statusLabel(item.status)}`
-            : `${escapeHtml(item.client_nom || '')} · ${statusLabel(item.status)} · ${item.pages_count} p.`;
+        const sub = `${clientsLine(item, compact)} · ${escapeHtml(item.updated_at || '')}`;
         const qrBadge = item.status === 'complete' && item.qr_url
             ? `<span class="doc-lib-file__qr-badge" title="QR code disponible"><iconify-icon icon="solar:qr-code-bold-duotone"></iconify-icon></span>`
             : '';
+        const multiBadge = item.ownership === 'multiple'
+            ? `<span class="doc-lib-file__multi-badge" title="Propriété multiple"><iconify-icon icon="solar:users-group-rounded-bold-duotone"></iconify-icon><span>${item.clients_count || (item.associated_clients || []).length || 0}</span></span>`
+            : '';
+        const clientAvatars = (item.associated_clients || []).length > 1
+            ? `<div class="doc-lib-file__avatars">${(item.associated_clients || []).slice(0, 3).map((c) => `<img src="${escapeHtml(c.photo_url || '/assets/images/user.jpg')}" alt="" class="doc-lib-file__avatar" loading="lazy">`).join('')}</div>`
+            : '';
 
         return `
-            <li class="doc-lib-file" data-encodage-id="${item.id_encodage}" role="button" tabindex="0">
+            <li class="doc-lib-file${item.ownership === 'multiple' ? ' doc-lib-file--multi' : ''}" data-encodage-id="${item.id_encodage}" role="button" tabindex="0">
                 ${thumb}
+                ${clientAvatars}
                 <div class="doc-lib-file__body">
-                    <div class="doc-lib-file__name">${escapeHtml(item.type_doc)} #${item.id_encodage}${qrBadge}</div>
-                    <div class="doc-lib-file__sub">${sub} · ${escapeHtml(item.updated_at || '')}</div>
+                    <div class="doc-lib-file__name">${escapeHtml(item.type_doc)} #${item.id_encodage}${multiBadge}${qrBadge}</div>
+                    <div class="doc-lib-file__sub">${sub}</div>
                 </div>
                 <span class="doc-lib-file__size">${escapeHtml(item.size_label)}</span>
             </li>`;

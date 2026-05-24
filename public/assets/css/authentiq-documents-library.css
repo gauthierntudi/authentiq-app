@@ -199,6 +199,48 @@
     font-size: 1.05rem;
 }
 
+.doc-lib-file__multi-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    margin-left: 0.35rem;
+    padding: 0.12rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #c4b5fd;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    vertical-align: middle;
+}
+
+.doc-lib-file__avatars {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 0.15rem;
+}
+
+.doc-lib-file__avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(14, 237, 238, 0.35);
+    margin-left: -8px;
+    background: #12151f;
+}
+
+.doc-lib-file__avatar:first-child {
+    margin-left: 0;
+}
+
+.doc-lib-file--multi {
+    border-left: 3px solid rgba(167, 139, 250, 0.55);
+}
+
 .doc-lib-file__size {
     font-size: 0.78rem;
     font-weight: 600;

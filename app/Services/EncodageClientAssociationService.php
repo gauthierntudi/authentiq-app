@@ -136,4 +136,77 @@ class EncodageClientAssociationService
     {
         return (int) $encodage->id_client === $clientId;
     }
+
+    /**
+     * @return list<array{id_client: int, nom_complet: string, photo_url: string, is_primary: bool}>
+     */
+    public function clientsListForEncodage(Encodage $encodage, ClientPhotoStorage $photos): array
+    {
+        $ids = $this->associatedClientIds($encodage);
+        if ($ids === []) {
+            return [];
+        }
+
+        if ($encodage->relationLoaded('associatedClients') && $encodage->associatedClients->isNotEmpty()) {
+            $byId = $encodage->associatedClients->keyBy('id_client');
+        } else {
+            $byId = Client::query()
+                ->whereIn('id_client', $ids)
+                ->get(['id_client', 'nom_complet', 'photo', 'created_at'])
+                ->keyBy('id_client');
+        }
+
+        $payload = [];
+        foreach ($ids as $id) {
+            $client = $byId->get($id);
+            if (! $client) {
+                continue;
+            }
+
+            $payload[] = [
+                'id_client' => (int) $client->id_client,
+                'nom_complet' => $client->nom_complet,
+                'photo_url' => $photos->photoUrl(
+                    $client->photo,
+                    $client->id_client,
+                    $client->photoCacheVersion(),
+                ),
+                'is_primary' => $this->isPrimaryOwner($encodage, (int) $client->id_client),
+            ];
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @param  list<array{nom_complet?: string|null}>  $clients
+     */
+    public function clientsDisplayLabel(array $clients, ?string $fallback = null): string
+    {
+        if ($clients === []) {
+            return $fallback ?: '—';
+        }
+
+        if (count($clients) === 1) {
+            return (string) ($clients[0]['nom_complet'] ?? $fallback ?? '—');
+        }
+
+        $names = array_values(array_filter(array_map(
+            fn (array $c) => trim((string) ($c['nom_complet'] ?? '')),
+            $clients,
+        )));
+
+        if ($names === []) {
+            return $fallback ?: '—';
+        }
+
+        $visible = array_slice($names, 0, 2);
+        $label = implode(', ', $visible);
+
+        if (count($names) > 2) {
+            $label .= ' +'.(count($names) - 2);
+        }
+
+        return $label;
+    }
 }

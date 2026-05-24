@@ -14,6 +14,7 @@ class DocumentsLibraryService
     public function __construct(
         private DocumentStorage $storage,
         private ClientPhotoStorage $clientPhotos,
+        private EncodageClientAssociationService $clientAssociation,
     ) {}
 
     /**
@@ -33,7 +34,8 @@ class DocumentsLibraryService
             ])
             ->with([
                 'client:'.Client::EAGER_SELECT,
-                'doc:id_doc,nom_doc,type_doc',
+                'associatedClients:'.Client::EAGER_SELECT,
+                'doc:id_doc,nom_doc,type_doc,ownership',
                 'pages' => fn ($q) => $q
                     ->select('id_page', 'id_encodage', 'page_number', 'file_path', 'file_size')
                     ->orderBy('page_number'),
@@ -42,7 +44,10 @@ class DocumentsLibraryService
             ->limit(300);
 
         if ($clientId !== null && $clientId > 0) {
-            $query->where('id_client', $clientId);
+            $query->where(function (Builder $q) use ($clientId) {
+                $q->where('id_client', $clientId)
+                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('id_client', $clientId));
+            });
         } elseif ($clientId === 0) {
             $query->whereNull('id_client');
         }
@@ -56,7 +61,8 @@ class DocumentsLibraryService
             $query->where(function (Builder $q) use ($term) {
                 $q->where('id_encodage', 'like', $term)
                     ->orWhere('affectation', 'like', $term)
-                    ->orWhereHas('client', fn (Builder $c) => $c->where('nom_complet', 'like', $term));
+                    ->orWhereHas('client', fn (Builder $c) => $c->where('nom_complet', 'like', $term))
+                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('nom_complet', 'like', $term));
             });
         }
 
@@ -101,12 +107,47 @@ class DocumentsLibraryService
      */
     private function buildClientFolders(Collection $encodages, ?int $selectedId): array
     {
-        $byClient = $encodages->groupBy('id_client');
+        /** @var array<int, array{items: Collection<int, Encodage>, last_activity: int}> $folderMap */
+        $folderMap = [];
+
+        foreach ($encodages as $enc) {
+            $clientIds = $this->clientAssociation->associatedClientIds($enc);
+            if ($clientIds === [] && $enc->id_client) {
+                $clientIds = [(int) $enc->id_client];
+            }
+
+            $activity = (int) ($enc->updated_at?->timestamp ?? 0);
+
+            foreach ($clientIds as $idClient) {
+                if (! isset($folderMap[$idClient])) {
+                    $folderMap[$idClient] = [
+                        'items' => collect(),
+                        'last_activity' => 0,
+                    ];
+                }
+
+                if (! $folderMap[$idClient]['items']->contains('id_encodage', $enc->id_encodage)) {
+                    $folderMap[$idClient]['items']->push($enc);
+                }
+
+                $folderMap[$idClient]['last_activity'] = max($folderMap[$idClient]['last_activity'], $activity);
+            }
+        }
+
+        if ($folderMap === []) {
+            return [];
+        }
+
+        $clientsById = Client::query()
+            ->whereIn('id_client', array_keys($folderMap))
+            ->get(['id_client', 'nom_complet', 'photo', 'created_at'])
+            ->keyBy('id_client');
+
         $folders = [];
 
-        foreach ($byClient as $idClient => $items) {
-            $idClient = (int) $idClient;
-            $client = $items->first()?->client;
+        foreach ($folderMap as $idClient => $data) {
+            $client = $clientsById->get($idClient);
+            $items = $data['items'];
 
             $sizeBytes = 0;
             $pagesCount = 0;
@@ -118,7 +159,7 @@ class DocumentsLibraryService
             }
 
             $folders[] = [
-                'id_client' => $idClient,
+                'id_client' => (int) $idClient,
                 'nom_complet' => $client?->nom_complet ?: 'Sans client',
                 'photo_url' => $this->clientPhotos->photoUrl(
                     $client?->photo,
@@ -131,7 +172,7 @@ class DocumentsLibraryService
                 'size_label' => $this->formatBytes($sizeBytes),
                 'folder_color' => $this->folderColor((int) $idClient),
                 'is_selected' => $selectedId > 0 && (int) $idClient === $selectedId,
-                'last_activity' => $items->max(fn (Encodage $e) => $e->updated_at?->timestamp ?? 0),
+                'last_activity' => $data['last_activity'],
             ];
         }
 
@@ -153,12 +194,22 @@ class DocumentsLibraryService
         $pagesCount = (int) ($e->page_count ?? $pages->count());
 
         $typeDoc = $e->doc?->nom_doc ?: $e->type_doc ?: 'Document';
+        $ownership = $e->doc?->ownership ?? 'single';
+        $associatedClients = $this->clientAssociation->clientsListForEncodage($e, $this->clientPhotos);
+        $clientLabel = $this->clientAssociation->clientsDisplayLabel(
+            $associatedClients,
+            $e->client?->nom_complet ?: 'Sans client',
+        );
+        $primaryClient = $associatedClients[0] ?? null;
 
         return [
             'id_encodage' => $e->id_encodage,
             'id_client' => (int) ($e->id_client ?? 0),
-            'client_nom' => $e->client?->nom_complet ?: 'Sans client',
-            'client_photo_url' => $this->clientPhotos->photoUrl(
+            'ownership' => $ownership,
+            'clients_count' => max(count($associatedClients), $e->client ? 1 : 0),
+            'associated_clients' => $associatedClients,
+            'client_nom' => $clientLabel,
+            'client_photo_url' => $primaryClient['photo_url'] ?? $this->clientPhotos->photoUrl(
                 $e->client?->photo,
                 $e->client?->id_client,
                 $e->client?->photoCacheVersion(),

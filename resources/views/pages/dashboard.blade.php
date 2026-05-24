@@ -243,6 +243,74 @@
             line-height: 1.3;
             word-break: break-word;
         }
+        .enc-table-client--multi {
+            align-items: flex-start;
+            gap: 0.65rem;
+        }
+        .enc-table-client__avatars {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .enc-table-client__photo--stack {
+            width: 32px;
+            height: 32px;
+            margin-left: -10px;
+            border-width: 2px;
+        }
+        .enc-table-client__photo--stack:first-child {
+            margin-left: 0;
+        }
+        .enc-table-client__more {
+            margin-left: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #0eedee;
+        }
+        .enc-table-client__text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            min-width: 0;
+        }
+        .enc-table-client__multi-badge {
+            display: inline-flex;
+            align-self: flex-start;
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 0.15rem 0.45rem;
+            border-radius: 999px;
+            background: rgba(14, 237, 238, 0.12);
+            color: #0eedee;
+            border: 1px solid rgba(14, 237, 238, 0.35);
+        }
+        .enc-table-doc {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+        .enc-table-doc__label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #e8ecf4;
+            line-height: 1.3;
+        }
+        .enc-table-doc__badge {
+            display: inline-flex;
+            align-self: flex-start;
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 0.15rem 0.45rem;
+            border-radius: 999px;
+            background: rgba(167, 139, 250, 0.15);
+            color: #c4b5fd;
+            border: 1px solid rgba(167, 139, 250, 0.35);
+        }
         .gridjs-th-content { font-weight: 800 !important; }
         /* Tableau encodages — thème sombre */
         #table-encodages .gridjs-container { color: #e8ecf4; }

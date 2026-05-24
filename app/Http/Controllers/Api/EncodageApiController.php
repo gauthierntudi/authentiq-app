@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Encodage;
 use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
+use App\Services\EncodageClientAssociationService;
 use App\Support\CurrentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ class EncodageApiController extends Controller
     public function __construct(
         private DocumentStorage $storage,
         private ClientPhotoStorage $clientPhotos,
+        private EncodageClientAssociationService $clientAssociation,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -34,7 +36,8 @@ class EncodageApiController extends Controller
             ])
             ->with([
                 'client:'.Client::EAGER_SELECT,
-                'doc:id_doc,nom_doc,type_doc',
+                'associatedClients:'.Client::EAGER_SELECT,
+                'doc:id_doc,nom_doc,type_doc,ownership',
                 'user:id_user,nom_complet',
                 'commune:id_commune,nom',
             ])
@@ -59,7 +62,8 @@ class EncodageApiController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('id_encodage', $search)
                     ->orWhere('affectation', 'like', "%{$search}%")
-                    ->orWhereHas('client', fn ($c) => $c->where('nom_complet', 'like', "%{$search}%"));
+                    ->orWhereHas('client', fn ($c) => $c->where('nom_complet', 'like', "%{$search}%"))
+                    ->orWhereHas('associatedClients', fn ($c) => $c->where('nom_complet', 'like', "%{$search}%"));
             });
         }
 
@@ -163,13 +167,23 @@ class EncodageApiController extends Controller
     private function formatRow(Encodage $e): array
     {
         $typeDoc = $e->doc?->nom_doc ?: $e->type_doc;
+        $ownership = $e->doc?->ownership ?? 'single';
+        $associatedClients = $this->clientAssociation->clientsListForEncodage($e, $this->clientPhotos);
+        $clientLabel = $this->clientAssociation->clientsDisplayLabel(
+            $associatedClients,
+            $e->client?->nom_complet,
+        );
+        $primaryClient = $associatedClients[0] ?? null;
 
         return [
             'id_encodage' => $e->id_encodage,
             'status' => $e->status,
             'numero' => $e->numero,
-            'client_nom' => $e->client?->nom_complet,
-            'client_photo_url' => $this->clientPhotos->photoUrl(
+            'ownership' => $ownership,
+            'clients_count' => max(count($associatedClients), $e->client ? 1 : 0),
+            'associated_clients' => $associatedClients,
+            'client_nom' => $clientLabel,
+            'client_photo_url' => $primaryClient['photo_url'] ?? $this->clientPhotos->photoUrl(
                 $e->client?->photo,
                 $e->client?->id_client,
                 $e->client?->photoCacheVersion(),
