@@ -32,7 +32,14 @@ class ClientDocumentApiController extends Controller
         $clientId = (int) $client->id_client;
 
         $items = Encodage::query()
-            ->with(['doc', 'commune'])
+            ->with([
+                'doc',
+                'commune',
+                'pages' => fn ($q) => $q
+                    ->select('id_page', 'id_encodage', 'page_number', 'file_path')
+                    ->orderBy('page_number')
+                    ->limit(1),
+            ])
             ->whereIn('status', ['complete', 'expired'])
             ->where(function ($q) use ($clientId) {
                 $q->where('id_client', $clientId)
@@ -41,7 +48,15 @@ class ClientDocumentApiController extends Controller
             ->orderByDesc('id_encodage')
             ->limit(200)
             ->get()
-            ->map(fn (Encodage $e) => $this->encodagePayload($e, $client));
+            ->map(function (Encodage $e) use ($client) {
+                $payload = $this->encodagePayload($e, $client);
+                $page = $e->relationLoaded('pages')
+                    ? $e->pages->sortBy('page_number')->first()
+                    : null;
+                $payload['first_page_url'] = $this->storage->url($page?->file_path);
+
+                return $payload;
+            });
 
         return response()->json(['status' => 'success', 'documents' => $items]);
     }
