@@ -62,6 +62,8 @@
         window.AUTHENTIQ_USER_ROLE = @json($user->role ?? '');
         window.AUTHENTIQ_TEXTRACT_ENABLED = @json(config('authentiq.textract_enabled'));
         window.AUTHENTIQ_REKOGNITION_ENABLED = @json(config('authentiq.rekognition_enabled'));
+        window.AUTHENTIQ_PDF_SERVICE_ENABLED = @json(config('authentiq.pdf_service.enabled'));
+        window.AUTHENTIQ_PDF_SERVICE_MIN_BYTES = @json(config('authentiq.pdf_service.min_bytes'));
         if (typeof iziToast !== 'undefined') {
             iziToast.settings({
                 position: 'topRight',

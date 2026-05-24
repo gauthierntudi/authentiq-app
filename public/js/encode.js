@@ -795,6 +795,82 @@ async function renderPdfPageToCanvas(canvas, pdfDoc, pageNum, container) {
     await page.render({ canvasContext: context, viewport }).promise;
 }
 
+function shouldUseServerPdfRasterizer(file) {
+    return Boolean(window.AUTHENTIQ_PDF_SERVICE_ENABLED)
+        && file.size >= (window.AUTHENTIQ_PDF_SERVICE_MIN_BYTES || 0);
+}
+
+async function renderRasterizedPageToCanvas(canvas, imageSrc, container) {
+    if (!canvas || !imageSrc || !container) return;
+
+    await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const pad = PDF_VIEWER_PADDING;
+            const maxW = Math.max(80, container.clientWidth - pad);
+            const maxH = Math.max(80, container.clientHeight - pad);
+            const fitScale = Math.min(maxW / img.width, maxH / img.height, 1);
+            const pixelRatio = window.devicePixelRatio || 1;
+            const drawW = Math.floor(img.width * fitScale * pixelRatio);
+            const drawH = Math.floor(img.height * fitScale * pixelRatio);
+            const context = canvas.getContext('2d');
+
+            canvas.width = drawW;
+            canvas.height = drawH;
+            canvas.style.width = `${Math.floor(drawW / pixelRatio)}px`;
+            canvas.style.height = `${Math.floor(drawH / pixelRatio)}px`;
+            context.drawImage(img, 0, 0, drawW, drawH);
+            resolve();
+        };
+        img.onerror = () => reject(new Error('Aperçu page indisponible'));
+        img.src = imageSrc;
+    });
+}
+
+async function importPdfViaServer(file) {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    const response = await fetch(`${ENCODAGE_API}/rasterize-pdf`, {
+        method: 'POST',
+        headers: encodeApiHeaders(),
+        body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Rasterisation PDF serveur échouée.');
+    }
+
+    const pages = await Promise.all((data.pages || []).map(async (page) => {
+        const image = page.image || '';
+        const blobRes = await fetch(image);
+        const blob = await blobRes.blob();
+
+        return {
+            id_page: null,
+            page_number: null,
+            blob,
+            image,
+            ocrText: '',
+            _sourcePdf: file.name,
+            _sourcePdfPage: page.page_number,
+            _serverRendered: true,
+        };
+    }));
+
+    return {
+        entry: {
+            id: `pdf-${Date.now()}`,
+            name: file.name,
+            pdfDoc: null,
+            pageCount: pages.length,
+            serverRendered: true,
+        },
+        pages,
+    };
+}
+
 async function renderPdfViewerPanel() {
     const entry = getActiveImportedPdf();
     const canvas = document.getElementById('pdfViewerCanvas');
@@ -821,7 +897,14 @@ async function renderPdfViewerPanel() {
     if (fileNameEl) fileNameEl.textContent = entry.name;
     if (controls) controls.hidden = false;
 
-    await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, document.getElementById('pdfViewerBody'));
+    if (entry.serverRendered || !entry.pdfDoc) {
+        const page = scannedPages[pdfViewerState.pageNum - 1];
+        if (page?.image) {
+            await renderRasterizedPageToCanvas(canvas, page.image, document.getElementById('pdfViewerBody'));
+        }
+    } else {
+        await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, document.getElementById('pdfViewerBody'));
+    }
     if (token !== pdfViewerRenderToken) return;
 
     updatePdfViewerControls();
@@ -835,7 +918,15 @@ async function renderPdfViewerModalCanvas() {
     if (!entry || !canvas || !container) return;
 
     if (title) title.textContent = entry.name;
-    await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, container);
+
+    if (entry.serverRendered || !entry.pdfDoc) {
+        const page = scannedPages[pdfViewerState.pageNum - 1];
+        if (page?.image) {
+            await renderRasterizedPageToCanvas(canvas, page.image, container);
+        }
+    } else {
+        await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, container);
+    }
     updatePdfViewerModalPager();
 }
 
@@ -989,6 +1080,10 @@ function setupPdfViewer() {
 }
 
 async function importPdfFile(file) {
+    if (shouldUseServerPdfRasterizer(file)) {
+        return importPdfViaServer(file);
+    }
+
     const { pdf, name } = await loadPdfDocumentFromFile(file);
     const entry = {
         id: `pdf-${Date.now()}`,
@@ -1035,6 +1130,9 @@ async function handlePdfFiles(fileList) {
 
     try {
         setPdfImportProgress(`Lecture de ${file.name}…`);
+        if (shouldUseServerPdfRasterizer(file)) {
+            setPdfImportProgress(`Rasterisation serveur de ${file.name}…`);
+        }
         const { entry, pages } = await importPdfFile(file);
 
         if (pages.length === 0) {

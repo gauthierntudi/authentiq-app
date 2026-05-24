@@ -16,6 +16,7 @@ use App\Services\DocumentStorage;
 use App\Services\EncodageClientAssociationService;
 use App\Services\EncodageQrService;
 use App\Services\OtpService;
+use App\Services\Pdf\PdfRasterizerClient;
 use App\Services\RekognitionService;
 use App\Services\TextractService;
 use App\Support\CurrentUser;
@@ -37,6 +38,7 @@ class EncodageWorkflowApiController extends Controller
         private ClientPhotoStorage $clientPhotos,
         private ClientDuplicateGuard $duplicateGuard,
         private EncodageClientAssociationService $clientAssociation,
+        private PdfRasterizerClient $pdfRasterizer,
     ) {}
 
     private function authUser(): User|JsonResponse
@@ -97,6 +99,56 @@ class EncodageWorkflowApiController extends Controller
             ->get(['id_doc', 'nom_doc', 'type_doc', 'montant', 'duree', 'ownership']);
 
         return response()->json($docs);
+    }
+
+    /** Rasterisation PDF via microservice Rust (fichiers lourds). */
+    public function rasterizePdf(Request $request): JsonResponse
+    {
+        $user = $this->authUser();
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+
+        if (! $this->pdfRasterizer->isEnabled()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Service PDF serveur désactivé.',
+            ], 503);
+        }
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:pdf', 'max:51200'],
+        ]);
+
+        /** @var \Illuminate\Http\UploadedFile $uploaded */
+        $uploaded = $request->file('file');
+
+        try {
+            $result = $this->pdfRasterizer->rasterize($uploaded);
+
+            $pages = array_map(static function (array $page): array {
+                return [
+                    'page_number' => (int) ($page['page_number'] ?? 0),
+                    'width' => (int) ($page['width'] ?? 0),
+                    'height' => (int) ($page['height'] ?? 0),
+                    'mime' => $page['mime'] ?? 'image/jpeg',
+                    'image' => 'data:image/jpeg;base64,'.($page['data_base64'] ?? ''),
+                ];
+            }, $result['pages']);
+
+            return response()->json([
+                'status' => 'success',
+                'page_count' => $result['page_count'],
+                'pages' => $pages,
+                'meta' => $result['meta'],
+                'source' => 'pdf-service',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     /** Legacy: saveImageOCR */

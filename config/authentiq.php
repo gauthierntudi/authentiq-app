@@ -90,6 +90,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Microservice PDF (Rust / Fly.io) — rasterisation fichiers lourds
+    |--------------------------------------------------------------------------
+    */
+    'pdf_service' => [
+        'enabled' => filter_var(env('AUTHENTIQ_PDF_SERVICE_ENABLED', false), FILTER_VALIDATE_BOOL),
+        'url' => rtrim((string) env('AUTHENTIQ_PDF_SERVICE_URL', ''), '/'),
+        'api_key' => env('AUTHENTIQ_PDF_SERVICE_API_KEY', ''),
+        'timeout' => (int) env('AUTHENTIQ_PDF_SERVICE_TIMEOUT', 120),
+        'min_bytes' => (int) env('AUTHENTIQ_PDF_SERVICE_MIN_BYTES', 2 * 1024 * 1024),
+        'dpi' => (int) env('AUTHENTIQ_PDF_SERVICE_DPI', 150),
+        'max_pages' => (int) env('AUTHENTIQ_PDF_SERVICE_MAX_PAGES', 100),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | API mobile client (Flutter) — durée des tokens Bearer
     |--------------------------------------------------------------------------
     */

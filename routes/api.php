@@ -84,6 +84,7 @@ Route::middleware('web')->group(function () {
 
         Route::prefix('encodage-workflow')->group(function () {
             Route::get('/doc-types', [EncodageWorkflowApiController::class, 'docTypes']);
+            Route::post('/rasterize-pdf', [EncodageWorkflowApiController::class, 'rasterizePdf']);
             Route::post('/save-image-ocr', [EncodageWorkflowApiController::class, 'saveImageOcr']);
             Route::get('/clients/search', [EncodageWorkflowApiController::class, 'searchClients']);
             Route::post('/save-client', [EncodageWorkflowApiController::class, 'saveClient']);
