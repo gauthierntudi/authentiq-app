@@ -1671,6 +1671,107 @@ function applyServerPagesToScanned(pages) {
     updateScanPagesUI();
 }
 
+function mergeServerPagesIntoScanned(serverPages) {
+    if (!Array.isArray(serverPages) || serverPages.length === 0) {
+        return;
+    }
+
+    serverPages.forEach((p, idx) => {
+        const pageNumber = p.page_number ?? idx + 1;
+        const i = pageNumber - 1;
+        const local = scannedPages[i];
+        if (!local) {
+            return;
+        }
+
+        local.id_page = p.id_page ?? local.id_page;
+        local.page_number = pageNumber;
+        if (p.file_path) {
+            local.image = p.file_path;
+        }
+        if (p.ocr_text !== undefined) {
+            local.ocrText = p.ocr_text || '';
+        }
+        local._isNewCapture = false;
+        if (local.id_page && !pageNeedsFileUpload(local)) {
+            local.blob = null;
+        }
+    });
+    syncOcrTextFromPages();
+    updateScanPagesUI();
+}
+
+const OCR_SAVE_BATCH_SIZE = 8;
+const SKIP_CLIENT_OCR_PAGE_COUNT = 10;
+
+async function parseSaveOcrResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    let data = null;
+
+    if (contentType.includes('application/json')) {
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = null;
+        }
+    }
+
+    if (!response.ok) {
+        const fallback = response.status === 413
+            ? 'Fichier trop volumineux pour le serveur (limite PHP/nginx). Réessayez avec un PDF plus léger.'
+            : `Erreur serveur (${response.status}).`;
+        const message = data?.message || fallback;
+        throw new Error(message);
+    }
+
+    if (!data) {
+        throw new Error('Réponse serveur invalide.');
+    }
+
+    if (data.status !== 'success') {
+        throw new Error(data.message || 'Échec de la sauvegarde.');
+    }
+
+    return data;
+}
+
+function buildSaveOcrFormDataForBatch(startIndex, endIndex, completePages) {
+    const formData = new FormData();
+
+    scannedPages.forEach((page, index) => {
+        if (page.id_page) {
+            formData.append(`pageId_${index}`, String(page.id_page));
+        }
+        const inBatch = index >= startIndex && index < endIndex;
+        if (inBatch && pageNeedsFileUpload(page) && page.blob instanceof Blob && page.blob.size > 0) {
+            formData.append(`file_${index}`, page.blob, `document_page_${index + 1}.jpg`);
+        }
+        formData.append(`ocr_${index}`, page.ocrText || '');
+    });
+
+    formData.append('ocrText', document.getElementById('ocrText').value);
+    formData.append('pageCount', scannedPages.length);
+    if (encodageId) {
+        formData.append('encodageId', encodageId);
+    }
+    if (!completePages) {
+        formData.append('partialSave', '1');
+    }
+
+    return formData;
+}
+
+async function postSaveOcrBatch(startIndex, endIndex, completePages) {
+    const formData = buildSaveOcrFormDataForBatch(startIndex, endIndex, completePages);
+    const response = await fetch(`${ENCODAGE_API}/save-image-ocr`, {
+        method: 'POST',
+        headers: encodeApiHeaders(),
+        body: formData,
+    });
+
+    return parseSaveOcrResponse(response);
+}
+
 function syncScanStepNextButton() {
     const actions = document.getElementById('scanStepActions');
     const n = scannedPages.length;
@@ -2135,6 +2236,48 @@ async function processAllPagesOCR() {
     setScanStepProcessing(true);
     showEncPagesLoader('step2');
 
+    const ocrProgress = document.getElementById('ocrProgress');
+    const ocrProgressText = document.getElementById('ocrProgressText');
+    const skipClientOcr = window.AUTHENTIQ_TEXTRACT_ENABLED
+        && scannedPages.length > SKIP_CLIENT_OCR_PAGE_COUNT;
+
+    if (skipClientOcr) {
+        if (ocrProgress) {
+            ocrProgress.style.display = 'block';
+        }
+        if (ocrProgressText) {
+            ocrProgressText.textContent = 'Préparation…';
+        }
+
+        scannedPages.forEach((page) => {
+            if (pageNeedsOcr(page)) {
+                page.ocrText = page.ocrText || '';
+                page._isNewCapture = false;
+            }
+        });
+        syncOcrTextFromPages();
+
+        if (ocrProgress) {
+            ocrProgress.style.display = 'none';
+        }
+
+        iziToast.info({
+            message: `${scannedPages.length} pages : OCR navigateur ignoré, Textract prendra le relais après sauvegarde.`,
+            timeout: 5000,
+        });
+
+        try {
+            await saveImageAndOCR();
+        } catch (err) {
+            console.error('saveImageAndOCR:', err);
+            iziToast.error({ message: err.message || 'Erreur lors de la sauvegarde.' });
+            hideEncPagesLoader('step2');
+            setScanStepProcessing(false);
+        }
+
+        return;
+    }
+
     try {
         await loadTesseractOnce();
     } catch (err) {
@@ -2145,60 +2288,62 @@ async function processAllPagesOCR() {
         return;
     }
 
-    const ocrProgress = document.getElementById('ocrProgress');
-    const ocrProgressText = document.getElementById('ocrProgressText');
-    const ocrTextArea = document.getElementById('ocrText');
-    
-    ocrProgress.style.display = 'block';
-    ocrProgressText.textContent = '0%';
-    
-    let allText = '';
+    if (ocrProgress) {
+        ocrProgress.style.display = 'block';
+    }
+    if (ocrProgressText) {
+        ocrProgressText.textContent = '0%';
+    }
+
     let processedCount = 0;
     const pagesNeedingOcr = scannedPages.filter(pageNeedsOcr).length;
     const ocrDenom = Math.max(pagesNeedingOcr, 1);
-    
-    const processPage = (index) => {
-        if (index >= scannedPages.length) {
-            ocrTextArea.value = allText;
-            ocrProgress.style.display = 'none';
-            const msg = pagesNeedingOcr > 0
-                ? `OCR terminé pour ${pagesNeedingOcr} page(s).`
-                : 'Texte OCR existant conservé.';
-            iziToast.success({ message: msg });
-            saveImageAndOCR();
-            return;
-        }
 
+    for (let index = 0; index < scannedPages.length; index++) {
         const page = scannedPages[index];
         if (!pageNeedsOcr(page)) {
-            allText += `--- Page ${index + 1} ---\n${page.ocrText}\n\n`;
-            processPage(index + 1);
-            return;
+            continue;
         }
-        
-        Tesseract.recognize(page.image, 'fra+eng', {
-            logger: info => {
-                if (info.status === 'recognizing text') {
-                    const pageProgress = (processedCount + info.progress) / ocrDenom;
-                    ocrProgressText.textContent = Math.round(pageProgress * 100) + '%';
-                }
-            }
-        }).then(({ data: { text } }) => {
+
+        try {
+            const { data: { text } } = await Tesseract.recognize(page.image, 'fra+eng', {
+                logger: (info) => {
+                    if (info.status === 'recognizing text' && ocrProgressText) {
+                        const pageProgress = (processedCount + info.progress) / ocrDenom;
+                        ocrProgressText.textContent = `${Math.round(pageProgress * 100)}%`;
+                    }
+                },
+            });
             scannedPages[index].ocrText = text;
             scannedPages[index]._isNewCapture = false;
-            allText += `--- Page ${index + 1} ---\n${text}\n\n`;
-            processedCount++;
-            processPage(index + 1);
-        }).catch(err => {
+        } catch (err) {
             console.error('Erreur OCR page', index + 1, err);
             scannedPages[index].ocrText = '';
             scannedPages[index]._isNewCapture = false;
-            processedCount++;
-            processPage(index + 1);
-        });
-    };
-    
-    processPage(0);
+        }
+
+        processedCount++;
+    }
+
+    syncOcrTextFromPages();
+
+    if (ocrProgress) {
+        ocrProgress.style.display = 'none';
+    }
+
+    const msg = pagesNeedingOcr > 0
+        ? `OCR terminé pour ${pagesNeedingOcr} page(s).`
+        : 'Texte OCR existant conservé.';
+    iziToast.success({ message: msg });
+
+    try {
+        await saveImageAndOCR();
+    } catch (err) {
+        console.error('saveImageAndOCR:', err);
+        iziToast.error({ message: err.message || 'Erreur lors de la sauvegarde.' });
+        hideEncPagesLoader('step2');
+        setScanStepProcessing(false);
+    }
 }
 
 async function blobFromPageImage(page) {
@@ -2266,77 +2411,63 @@ async function saveImageAndOCR() {
         await ensurePageBlobsForUpload();
     } catch (err) {
         console.error('ensurePageBlobsForUpload:', err);
-        iziToast.error({ message: 'Impossible de préparer les fichiers des pages pour l\'envoi.' });
         hideEncPagesLoader('step2');
         setScanStepProcessing(false);
-
-        return;
+        throw new Error('Impossible de préparer les fichiers des pages pour l\'envoi.');
     }
 
     const missing = scannedPages.filter((p) => {
-        if (p.id_page && !p._isNewCapture && (!(p.blob instanceof Blob) || p.blob.size === 0)) {
+        if (!pageNeedsFileUpload(p)) {
             return false;
         }
 
         return !(p.blob instanceof Blob) || p.blob.size === 0;
     });
     if (missing.length > 0) {
-        iziToast.error({
-            message: `${missing.length} page(s) sans fichier image. Repassez par l\'étape scan (Suivant).`,
-        });
         hideEncPagesLoader('step2');
         setScanStepProcessing(false);
-
-        return;
+        throw new Error(`${missing.length} page(s) sans fichier image. Repassez par l'étape scan (Suivant).`);
     }
 
-    const formData = new FormData();
+    const total = scannedPages.length;
+    const batchSize = OCR_SAVE_BATCH_SIZE;
+    const ocrProgressText = document.getElementById('ocrProgressText');
+    let lastData = null;
 
-    scannedPages.forEach((page, index) => {
-        if (page.id_page) {
-            formData.append(`pageId_${index}`, String(page.id_page));
+    syncOcrTextFromPages();
+
+    for (let start = 0; start < total; start += batchSize) {
+        const end = Math.min(start + batchSize, total);
+        const completePages = end >= total;
+        const batchNum = Math.floor(start / batchSize) + 1;
+        const batchTotal = Math.ceil(total / batchSize);
+
+        if (ocrProgressText) {
+            ocrProgressText.textContent = `Sauvegarde ${batchNum}/${batchTotal}…`;
         }
-        if (page.blob instanceof Blob && page.blob.size > 0) {
-            formData.append(`file_${index}`, page.blob, `document_page_${index + 1}.jpg`);
+
+        lastData = await postSaveOcrBatch(start, end, completePages);
+
+        encodageId = lastData.encodageId;
+        document.getElementById('encodageId').value = encodageId;
+
+        if (Array.isArray(lastData.pages)) {
+            mergeServerPagesIntoScanned(lastData.pages);
         }
-        formData.append(`ocr_${index}`, page.ocrText || '');
+    }
+
+    setEncodageStatus('incomplete');
+    clearScanPagesDirty();
+    iziToast.success({
+        message: lastData?.message || `${total} page(s) sauvegardée(s).`,
     });
 
-    formData.append('ocrText', document.getElementById('ocrText').value);
-    formData.append('pageCount', scannedPages.length);
-    if (encodageId) formData.append('encodageId', encodageId);
+    if (lastData?.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
+        pollTextractOcr(encodageId);
+    }
 
-    fetch(`${ENCODAGE_API}/save-image-ocr`, {
-        method: 'POST',
-        headers: encodeApiHeaders(),
-        body: formData,
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            encodageId = data.encodageId;
-            document.getElementById('encodageId').value = encodageId;
-            setEncodageStatus('incomplete');
-            clearScanPagesDirty();
-            if (Array.isArray(data.pages)) {
-                applyServerPagesToScanned(data.pages);
-            }
-            iziToast.success({ message: data.message || `${scannedPages.length} page(s) sauvegardée(s).` });
-            if (data.textract_queued && window.AUTHENTIQ_TEXTRACT_ENABLED) {
-                pollTextractOcr(encodageId);
-            }
-        } else {
-            iziToast.error({ message: data.message });
-        }
-    })
-    .catch(error => {
-        console.error('Erreur:', error);
-        iziToast.error({ message: 'Erreur lors de la sauvegarde.' });
-    })
-    .finally(() => {
-        hideEncPagesLoader('step2');
-        setScanStepProcessing(false);
-    });
+    hideEncPagesLoader('step2');
+    setScanStepProcessing(false);
 }
 
 function loadDocumentTypes() {

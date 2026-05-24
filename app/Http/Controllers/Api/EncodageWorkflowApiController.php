@@ -200,20 +200,30 @@ class EncodageWorkflowApiController extends Controller
                     throw new \RuntimeException('Aucune page enregistrée.');
                 }
 
+                $allPages = EncodagePage::query()
+                    ->where('id_encodage', $encodageId)
+                    ->orderBy('page_number')
+                    ->get();
+
                 Encodage::query()->where('id_encodage', $encodageId)->update([
-                    'files' => implode(',', $filePaths),
-                    'page_count' => count($savedPages),
+                    'files' => $allPages->pluck('file_path')->implode(','),
+                    'page_count' => $allPages->count(),
                 ]);
 
                 $textractQueued = $this->queueTextractJobs($savedPages);
 
+                $pagesPayload = $allPages
+                    ->map(fn (EncodagePage $p) => $this->pagePayload($p, (string) $p->ocr_text))
+                    ->values()
+                    ->all();
+
                 return response()->json([
                     'status' => 'success',
                     'encodageId' => $encodageId,
-                    'pageCount' => count($savedPages),
-                    'pages' => $savedPages,
+                    'pageCount' => $allPages->count(),
+                    'pages' => $pagesPayload,
                     'textract_queued' => $textractQueued,
-                    'message' => count($savedPages).' page(s) sauvegardée(s).',
+                    'message' => $allPages->count().' page(s) sauvegardée(s).',
                 ]);
             });
         } catch (\Throwable $e) {
@@ -881,12 +891,23 @@ class EncodageWorkflowApiController extends Controller
         $savedPages = [];
         $filePaths = [];
         $keptPageIds = [];
+        $partialSave = $request->boolean('partialSave', false);
 
         for ($i = 0; $i < $pageCount; $i++) {
             $pageOcr = (string) $request->input("ocr_{$i}", '');
             $existingPageId = (int) $request->input("pageId_{$i}", 0);
             $file = $request->file("file_{$i}");
             $hasFile = $file && $file->isValid();
+
+            if ($existingPageId <= 0 && ! $hasFile) {
+                if ($partialSave) {
+                    continue;
+                }
+
+                throw new \RuntimeException(
+                    'Page '.($i + 1).' : envoyez le fichier image ou l\'identifiant pageId_'.$i.' d\'une page déjà enregistrée.'
+                );
+            }
 
             if ($existingPageId > 0 && ! $hasFile) {
                 $page = EncodagePage::query()
@@ -908,12 +929,6 @@ class EncodageWorkflowApiController extends Controller
                 $savedPages[] = $this->pagePayload($page, $pageOcr);
 
                 continue;
-            }
-
-            if (! $hasFile) {
-                throw new \RuntimeException(
-                    'Page '.($i + 1).' : envoyez le fichier image ou l\'identifiant pageId_'.$i.' d\'une page déjà enregistrée.'
-                );
             }
 
             if ($existingPageId > 0) {
@@ -944,14 +959,16 @@ class EncodageWorkflowApiController extends Controller
             $savedPages[] = $this->pagePayload($page, $pageOcr);
         }
 
-        $orphans = EncodagePage::query()
-            ->where('id_encodage', $encodageId)
-            ->when($keptPageIds !== [], fn ($q) => $q->whereNotIn('id_page', $keptPageIds))
-            ->get();
+        if (! $partialSave) {
+            $orphans = EncodagePage::query()
+                ->where('id_encodage', $encodageId)
+                ->when($keptPageIds !== [], fn ($q) => $q->whereNotIn('id_page', $keptPageIds))
+                ->get();
 
-        foreach ($orphans as $orphan) {
-            $this->storage->delete($orphan->file_path);
-            $orphan->delete();
+            foreach ($orphans as $orphan) {
+                $this->storage->delete($orphan->file_path);
+                $orphan->delete();
+            }
         }
 
         return [$savedPages, $filePaths];
