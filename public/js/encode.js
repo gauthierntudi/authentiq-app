@@ -3745,6 +3745,82 @@ function recapMenuItem(icon, text) {
         </li>`;
 }
 
+function recapClientInitials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) {
+        return '?';
+    }
+    if (parts.length === 1) {
+        return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function renderRecapClientCard(client, index) {
+    const photoUrl = client.photo_url || '';
+    const avatar = photoUrl
+        ? `<img src="${escapeAttr(photoUrl)}" alt="" class="enc-recap-client-card__avatar">`
+        : `<span class="enc-recap-client-card__avatar enc-recap-client-card__avatar--initials" aria-hidden="true">${escapeHtml(recapClientInitials(client.nom_complet))}</span>`;
+    const badges = [
+        client.is_primary ? '<span class="enc-recap-client-card__badge enc-recap-client-card__badge--primary">Principal</span>' : '',
+        client.is_active === false ? '<span class="enc-recap-client-card__badge enc-recap-client-card__badge--pending">OTP en attente</span>' : '',
+    ].filter(Boolean).join('');
+    const tel = client.tel || '';
+    const email = client.email || '';
+
+    return `
+        <article class="enc-recap-client-card" data-client-index="${index}">
+            ${avatar}
+            <div class="enc-recap-client-card__body">
+                <div class="enc-recap-client-card__head">
+                    <p class="enc-recap-client-card__name">${escapeHtml(client.nom_complet || '—')}</p>
+                    ${badges ? `<div class="enc-recap-client-card__badges">${badges}</div>` : ''}
+                </div>
+                ${tel ? `<a href="tel:${escapeAttr(tel.replace(/\s/g, ''))}" class="enc-recap-client-card__meta"><iconify-icon icon="solar:phone-bold-duotone"></iconify-icon><span>${escapeHtml(tel)}</span></a>` : ''}
+                ${email ? `<a href="mailto:${escapeAttr(email)}" class="enc-recap-client-card__meta"><iconify-icon icon="solar:letter-bold-duotone"></iconify-icon><span>${escapeHtml(email)}</span></a>` : ''}
+            </div>
+        </article>`;
+}
+
+function renderRecapClientsScroll(associated) {
+    return `
+        <div class="enc-recap-clients-scroll" tabindex="0" aria-label="Liste des clients associés">
+            ${associated.map((c, i) => renderRecapClientCard(c, i)).join('')}
+        </div>`;
+}
+
+function renderRecapClientsInfoPanel(associated) {
+    return `
+        <div class="enc-recap-clients-panel">
+            ${associated.map((c, i) => {
+                const tel = c.tel || '—';
+                const email = c.email || '—';
+                const role = c.is_primary ? ' (client principal)' : '';
+
+                return `
+                    <section class="enc-recap-clients-panel__block">
+                        <h6 class="enc-recap-clients-panel__name">${escapeHtml(c.nom_complet || '—')}${role ? `<span class="enc-recap-clients-panel__role">${escapeHtml(role.trim())}</span>` : ''}</h6>
+                        <ul class="enc-recap-menu enc-recap-menu--compact">
+                            ${recapInfoItem('solar:phone-bold-duotone', 'Téléphone', tel)}
+                            ${recapInfoItem('solar:letter-bold-duotone', 'Email', email)}
+                        </ul>
+                    </section>`;
+            }).join('')}
+        </div>`;
+}
+
+function renderRecapClientsSummaryItems(associated) {
+    return associated.map((c) => {
+        const suffix = c.is_primary ? ' · principal' : '';
+
+        return recapMenuItem(
+            c.is_primary ? 'solar:crown-bold-duotone' : 'solar:user-bold-duotone',
+            `${c.nom_complet || '—'}${suffix}`,
+        );
+    }).join('');
+}
+
 function renderRecapitulatifHtml(data) {
     const client = data.client || {};
     const doc = data.document || {};
@@ -3761,16 +3837,13 @@ function renderRecapitulatifHtml(data) {
            </div>`
         : '';
     const associated = Array.isArray(data.associated_clients) ? data.associated_clients : [];
-    const multiClients = associated.length > 1;
+    const isMultiOwnership = doc.ownership === 'multiple';
+    const showMultiClientLayout = associated.length > 1 || (isMultiOwnership && associated.length > 0);
     const photoUrl = client.photo_url || 'assets/images/user.jpg';
     const tel = client.tel || '';
     const email = client.email || '';
     const refNum = qr.numero || enc.numero || '—';
-    const clientsListHtml = multiClients
-        ? `<ul class="enc-recap-clients-list list-unstyled mb-0 mt-2">
-            ${associated.map((c) => `<li class="small">${escapeHtml(c.nom_complet || '—')}${c.is_primary ? ' <span class="text-muted">(principal)</span>' : ''}</li>`).join('')}
-           </ul>`
-        : '';
+    const clientTabLabel = showMultiClientLayout ? `Clients (${associated.length})` : 'Client';
 
     const telBtn = tel
         ? `<a href="tel:${escapeAttr(tel.replace(/\s/g, ''))}" class="btn btn-sm btn-light fw-semibold enc-recap-profile__btn" style="border-radius:12px"><iconify-icon icon="solar:phone-bold"></iconify-icon><span>Appeler</span></a>`
@@ -3780,19 +3853,13 @@ function renderRecapitulatifHtml(data) {
         : `<button type="button" class="btn btn-sm btn-light fw-semibold enc-recap-profile__btn" style="border-radius:12px" disabled><iconify-icon icon="solar:letter-bold"></iconify-icon><span>Email</span></button>`;
 
     const sortedPages = pages.slice().sort((a, b) => (a.page_number ?? 0) - (b.page_number ?? 0));
-    const galleryCells = sortedPages.slice(0, 6).map((p, i) => `
+    const galleryCells = sortedPages.map((p, i) => `
         <div class="enc-recap-gallery__cell-wrap">
-            <button type="button" class="enc-recap-gallery__cell" data-page-index="${i}" title="Voir la page ${p.page_number}">
-                <img src="${escapeAttr(p.file_path)}" alt="Page ${p.page_number}" loading="lazy">
+            <button type="button" class="enc-recap-gallery__cell" data-page-index="${i}" title="Voir la page ${p.page_number ?? i + 1}">
+                <img src="${escapeAttr(p.file_path)}" alt="Page ${p.page_number ?? i + 1}" loading="lazy">
+                <span class="enc-recap-gallery__page-num">${p.page_number ?? i + 1}</span>
             </button>
         </div>`).join('');
-    const moreCell = sortedPages.length > 6
-        ? `<div class="enc-recap-gallery__cell-wrap">
-            <button type="button" class="enc-recap-gallery__cell enc-recap-gallery__cell--more" data-page-index="6" title="Voir les autres pages">
-                <span>+${sortedPages.length - 6}</span>
-            </button>
-           </div>`
-        : '';
     const emptyGallery = pageCount === 0
         ? '<div class="enc-recap-gallery__empty">Aucune page importée</div>'
         : '';
@@ -3834,6 +3901,15 @@ function renderRecapitulatifHtml(data) {
         ${docMissingBanner}
         <div class="enc-recap-bento">
             <div class="enc-recap-bento__row enc-recap-bento__row--top">
+                ${showMultiClientLayout && associated.length > 0 ? `
+                <article class="enc-recap-tile enc-recap-tile--profile enc-recap-tile--profile-multi">
+                    <header class="enc-recap-tile__head">
+                        <h5 class="enc-recap-tile__title">Clients associés</h5>
+                        <span class="enc-recap-tile__count">${associated.length}</span>
+                    </header>
+                    ${isMultiOwnership ? '<p class="enc-recap-profile__subtitle">Propriété multiple — co-titulaires du document</p>' : ''}
+                    ${renderRecapClientsScroll(associated)}
+                </article>` : `
                 <article class="enc-recap-tile enc-recap-tile--profile">
                     <div class="enc-recap-profile">
                         <div class="enc-recap-profile__avatar-wrap">
@@ -3842,31 +3918,32 @@ function renderRecapitulatifHtml(data) {
                                 <iconify-icon icon="solar:verified-check-bold"></iconify-icon>
                             </span>
                         </div>
-                        <p class="enc-recap-profile__name">${escapeHtml(multiClients ? `${associated.length} clients associés` : (client.nom_complet || '—'))}</p>
-                        ${clientsListHtml}
+                        <p class="enc-recap-profile__name">${escapeHtml(client.nom_complet || '—')}</p>
                         <div class="enc-recap-profile__actions">
                             ${telBtn}
                             ${mailBtn}
                         </div>
                     </div>
-                </article>
+                </article>`}
                 <article class="enc-recap-tile enc-recap-tile--info">
                     <header class="enc-recap-tile__head enc-recap-tile__head--tabs">
                         <h5 class="enc-recap-tile__title">Informations</h5>
                         <div class="enc-recap-tile__head-end">
                             <span class="enc-recap-tile__pill ${isComplete ? 'enc-recap-tile__pill--ok' : 'enc-recap-tile__pill--wait'}">${isComplete ? 'Finalisé' : 'En attente'}</span>
                             <div class="enc-recap-tabs" role="tablist">
-                                <button type="button" class="enc-recap-tab is-active" data-recap-tab="info-client" role="tab">Client</button>
+                                <button type="button" class="enc-recap-tab is-active" data-recap-tab="info-client" role="tab">${clientTabLabel}</button>
                                 <button type="button" class="enc-recap-tab" data-recap-tab="info-document" role="tab">Document</button>
                             </div>
                         </div>
                     </header>
                     <div class="enc-recap-menu-panels">
-                        <ul class="enc-recap-menu enc-recap-menu-panel is-active" data-recap-panel="info-client">
+                        ${showMultiClientLayout && associated.length > 0
+                            ? `<div class="enc-recap-clients-scroll enc-recap-clients-scroll--info enc-recap-menu-panel is-active" data-recap-panel="info-client">${renderRecapClientsInfoPanel(associated)}</div>`
+                            : `<ul class="enc-recap-menu enc-recap-menu-panel is-active" data-recap-panel="info-client">
                             ${recapInfoItem('solar:user-bold-duotone', 'Nom complet', client.nom_complet)}
                             ${recapInfoItem('solar:phone-bold-duotone', 'Téléphone', tel)}
                             ${recapInfoItem('solar:letter-bold-duotone', 'Email', email)}
-                        </ul>
+                        </ul>`}
                         <ul class="enc-recap-menu enc-recap-menu-panel" data-recap-panel="info-document" hidden>
                             ${recapInfoItem('solar:document-text-bold-duotone', 'Type de document', doc.nom_doc)}
                             ${recapInfoItem('solar:wallet-money-bold-duotone', 'Montant', formatEncMontant(enc.montant))}
@@ -3895,16 +3972,18 @@ function renderRecapitulatifHtml(data) {
                     <header class="enc-recap-tile__head enc-recap-tile__head--tabs">
                         <h5 class="enc-recap-tile__title">Synthèse</h5>
                         <div class="enc-recap-tabs" role="tablist">
-                            <button type="button" class="enc-recap-tab is-active" data-recap-tab="client" role="tab">Client</button>
+                            <button type="button" class="enc-recap-tab is-active" data-recap-tab="client" role="tab">${clientTabLabel}</button>
                             <button type="button" class="enc-recap-tab" data-recap-tab="document" role="tab">Document</button>
                         </div>
                     </header>
                     <div class="enc-recap-menu-panels">
-                        <ul class="enc-recap-menu enc-recap-menu-panel is-active" data-recap-panel="client">
+                        ${showMultiClientLayout && associated.length > 0
+                            ? `<ul class="enc-recap-menu enc-recap-menu-panel is-active" data-recap-panel="client">${renderRecapClientsSummaryItems(associated)}</ul>`
+                            : `<ul class="enc-recap-menu enc-recap-menu-panel is-active" data-recap-panel="client">
                             ${recapMenuItem('solar:user-bold-duotone', client.nom_complet || '—')}
                             ${recapMenuItem('solar:phone-bold-duotone', tel || '—')}
                             ${recapMenuItem('solar:letter-bold-duotone', email || '—')}
-                        </ul>
+                        </ul>`}
                         <ul class="enc-recap-menu enc-recap-menu-panel" data-recap-panel="document" hidden>
                             ${recapMenuItem('solar:document-text-bold-duotone', doc.nom_doc || '—')}
                             ${recapMenuItem('solar:wallet-money-bold-duotone', formatEncMontant(enc.montant))}
@@ -3918,8 +3997,10 @@ function renderRecapitulatifHtml(data) {
                         <h5 class="enc-recap-tile__title">Pages PDF</h5>
                         <span class="enc-recap-tile__count">${pageCount}</span>
                     </header>
-                    <div class="enc-recap-gallery__grid">
-                        ${galleryCells}${moreCell || emptyGallery}
+                    <div class="enc-recap-gallery__scroll">
+                        <div class="enc-recap-gallery__grid">
+                            ${galleryCells || emptyGallery}
+                        </div>
                     </div>
                 </article>
             </div>

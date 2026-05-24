@@ -787,7 +787,7 @@ class EncodageWorkflowApiController extends Controller
 
         $clients = Client::query()
             ->whereIn('id_client', $ids)
-            ->get(['id_client', 'nom_complet', 'tel', 'email', 'is_active'])
+            ->get(['id_client', 'nom_complet', 'tel', 'email', 'is_active', 'photo'])
             ->keyBy('id_client');
 
         $payload = [];
@@ -803,6 +803,11 @@ class EncodageWorkflowApiController extends Controller
                 'email' => $client->email,
                 'is_active' => (bool) $client->is_active,
                 'is_primary' => (int) $encodage->id_client === (int) $client->id_client,
+                'photo_url' => $this->clientPhotos->photoUrl(
+                    $client->photo,
+                    $client->id_client,
+                    $client->photoCacheVersion(),
+                ),
             ];
         }
 
