@@ -392,10 +392,10 @@ function restoreIncompleteEncodage(data) {
     }
 
     // Aller à l'étape appropriée
-    if (!enc.id_client) {
-        goToStep(3); // Pas de client, aller à l'étape client
-    } else if (!enc.id_doc) {
-        goToStep(4); // Pas de document, aller à l'étape document
+    if (!enc.id_doc) {
+        goToStep(3); // Pas de document, aller à l'étape document
+    } else if (!enc.id_client) {
+        goToStep(4); // Pas de client, aller à l'étape client
     } else {
         goToStep(5); // Tout est là, aller au récapitulatif
     }

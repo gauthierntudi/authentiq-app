@@ -7,7 +7,7 @@
                         <iconify-icon icon="solar:scanner-bold-duotone" class="text-primary" style="font-size:1.5em"></iconify-icon>
                         Encodage de documents
                     </h4>
-                    <p class="encodage-wizard__subtitle mb-0 mt-1">Scanner intelligent avec détection automatique A4</p>
+                    <p class="encodage-wizard__subtitle mb-0 mt-1">Importez les PDF scannés via imprimante-scanner, puis poursuivez l'encodage</p>
                 </div>
                 <div class="mt-3 mt-sm-0">
                     <a href="{{ url('/dashboard') }}" class="btn btn-light" style="border-radius:15px;">
@@ -24,21 +24,21 @@
     </div>
 
     <div class="stepper-header" role="navigation" aria-label="Étapes d'encodage">
-        <button type="button" class="step-item active" data-step="1" title="Scanner le document">
+        <button type="button" class="step-item active" data-step="1" title="Joindre les PDF scannés">
             <div class="step-number">1</div>
-            <div class="step-title">Scanner</div>
+            <div class="step-title">PDF</div>
         </button>
         <button type="button" class="step-item" data-step="2" title="Texte OCR">
             <div class="step-number">2</div>
             <div class="step-title">OCR</div>
         </button>
-        <button type="button" class="step-item" data-step="3" title="Client">
+        <button type="button" class="step-item" data-step="3" title="Type et dates du document">
             <div class="step-number">3</div>
-            <div class="step-title">Client</div>
-        </button>
-        <button type="button" class="step-item" data-step="4" title="Type et dates du document">
-            <div class="step-number">4</div>
             <div class="step-title">Document</div>
+        </button>
+        <button type="button" class="step-item" data-step="4" title="Client">
+            <div class="step-number">4</div>
+            <div class="step-title">Client</div>
         </button>
         <button type="button" class="step-item" data-step="5" title="Récapitulatif et validation">
             <div class="step-number">5</div>
@@ -46,68 +46,103 @@
         </button>
     </div>
     <p id="encodageEditHint" class="encodage-wizard__edit-hint text-muted small mb-3">
-        Tant que l'encodage n'est pas finalisé, vous pouvez revenir modifier les pages, le client ou le document via les étapes ci-dessus ou les boutons du récapitulatif.
+        Tant que l'encodage n'est pas finalisé, vous pouvez revenir modifier les PDF importés, le document ou le client via les étapes ci-dessus ou les boutons du récapitulatif.
     </p>
 
     <div id="step1" class="step active">
-        <h4><iconify-icon icon="solar:camera-bold-duotone"></iconify-icon> Scannez votre document</h4>
-        <div class="scanner-help">
-            <iconify-icon icon="solar:info-circle-bold-duotone"></iconify-icon>
-            <strong>Documents à une page ou plusieurs pages</strong> — Après la première page validée, le bouton <em>Suivant</em> apparaît : vous pouvez continuer ou scanner d'autres pages.
-            Documents multipages (livret, dossier…) : validez chaque page avec <em>Ajouter une autre page</em> ou passez à l'OCR quand toutes les pages sont prêtes.
-            Vous pouvez <strong>supprimer</strong> une page erronée via l’icône poubelle (étapes Scanner, OCR ou récapitulatif).
-            <br><span class="text-muted small">Placez le document à plat, bon éclairage ; détection automatique des contours A4.</span>
+        <h4 class="mb-3"><iconify-icon icon="solar:document-add-bold-duotone"></iconify-icon> Joindre les PDF</h4>
+
+        <div id="scanPagesSummary" class="enc-pages-gallery mb-3" hidden aria-live="polite">
+            <div class="enc-pages-gallery__head">
+                <span id="scanPagesCount" class="enc-pages-gallery__count"></span>
+            </div>
+            <div id="scanPagesList" class="enc-pages-gallery__strip" role="list"></div>
         </div>
-        <div id="scanPagesSummary" class="scan-pages-summary" aria-live="polite">
-            <span id="scanPagesCount" class="scan-pages-summary__count">Aucune page enregistrée</span>
-            <ul id="scanPagesList" class="scan-pages-summary__list list-unstyled mb-0"></ul>
+
+        <p id="pdfImportProgress" class="enc-pdf-import-progress text-muted small mb-2" hidden aria-live="polite"></p>
+
+        <div class="row enc-pdf-step g-3 align-items-stretch">
+            <div class="col-lg-6 d-flex">
+                <div class="enc-pdf-upload flex-fill">
+                    <input type="file" id="pdfFileInput" class="visually-hidden" accept="application/pdf,.pdf">
+                    <div id="pdfDropZone" class="enc-pdf-dropzone enc-pdf-dropzone--column" tabindex="0" role="button" aria-label="Déposer un PDF">
+                        <span class="enc-pdf-dropzone__icon" aria-hidden="true">
+                            <iconify-icon icon="solar:upload-square-bold-duotone"></iconify-icon>
+                        </span>
+                        <p class="enc-pdf-dropzone__title mb-2">Déposer un PDF</p>
+                        <p class="enc-pdf-dropzone__hint text-muted small mb-2 mb-sm-3">Un encodage = un document. Un nouvel import remplace le précédent.</p>
+                        <button type="button" id="btnSelectPdf" class="btn btn-primary btn-sm fw-semibold" style="border-radius:12px">
+                            <iconify-icon icon="solar:folder-with-files-bold-duotone"></iconify-icon>
+                            Parcourir
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 d-flex">
+                <section class="enc-pdf-viewer flex-fill" id="pdfViewerPanel" aria-label="Aperçu du PDF">
+                    <header class="enc-pdf-viewer__head">
+                        <span id="pdfViewerFileName" class="enc-pdf-viewer__name text-truncate">Aperçu</span>
+                        <div class="enc-pdf-viewer__actions">
+                            <button type="button" id="pdfViewerExpand" class="btn btn-sm btn-light fw-semibold" style="border-radius:10px" title="Agrandir" disabled>
+                                <iconify-icon icon="solar:full-screen-bold-duotone"></iconify-icon>
+                            </button>
+                        </div>
+                    </header>
+                    <div class="enc-pdf-viewer__body" id="pdfViewerBody">
+                        <div id="pdfViewerEmpty" class="enc-pdf-viewer__empty">
+                            <iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>
+                        </div>
+                        <canvas id="pdfViewerCanvas" class="enc-pdf-viewer__canvas" hidden></canvas>
+                    </div>
+                    <footer class="enc-pdf-viewer__foot" id="pdfViewerControls" hidden>
+                        <select id="pdfViewerFileSelect" class="form-select form-select-sm enc-pdf-viewer__select" aria-label="Fichier PDF"></select>
+                        <div class="enc-pdf-viewer__pager">
+                            <button type="button" id="pdfViewerPrev" class="btn btn-sm btn-light" aria-label="Page précédente">
+                                <iconify-icon icon="solar:alt-arrow-left-bold"></iconify-icon>
+                            </button>
+                            <span id="pdfViewerPageLabel" class="enc-pdf-viewer__page-label">1 / 1</span>
+                            <button type="button" id="pdfViewerNext" class="btn btn-sm btn-light" aria-label="Page suivante">
+                                <iconify-icon icon="solar:alt-arrow-right-bold"></iconify-icon>
+                            </button>
+                        </div>
+                    </footer>
+                </section>
+            </div>
         </div>
-        <div id="scanStepActions" class="scan-step-actions" hidden>
-            <p class="scan-step-actions__hint text-muted small mb-2 mb-md-0">
-                Vous pouvez scanner une autre page ou continuer vers l'extraction du texte (OCR).
-            </p>
-            <button id="nextStep1Bar" type="button" class="btn btn-success fw-semibold" title="Continuer avec les pages enregistrées">
+
+        <div id="scanStepActions" class="scan-step-actions mt-3" hidden>
+            <button id="nextStep1Bar" type="button" class="btn btn-success fw-semibold" title="Continuer">
                 <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
                 Suivant
             </button>
         </div>
-        <div class="row">
-            <div class="col-lg-6 mb-3">
-                <div class="enc-scan-camera">
-                    <div class="enc-scan-camera__head">
-                        <h5 class="enc-scan-camera__title mb-0"><iconify-icon icon="solar:videocamera-record-bold-duotone"></iconify-icon> Caméra</h5>
-                        <button type="button" id="btnExpandScanCamera" class="btn btn-sm btn-light fw-semibold" style="border-radius:12px" title="Ouvrir le scan en grand (portrait)">
-                            <iconify-icon icon="solar:full-screen-bold-duotone"></iconify-icon>
-                            <span>Agrandir</span>
-                        </button>
-                    </div>
-                    <div class="enc-scan-camera__preview">
-                        <video id="video" autoplay playsinline muted></video>
-                    </div>
-                    <button id="captureButton" type="button" class="btn btn-primary mt-3 w-100 fw-semibold" style="border-radius:12px">
-                        <iconify-icon icon="solar:camera-bold-duotone"></iconify-icon>
-                        Capturer le document
-                    </button>
+
+        <div class="d-none" aria-hidden="true">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="canvas"></canvas>
+            <div id="previewContainer"></div>
+            <button id="nextStep1" type="button" class="d-none" tabindex="-1" aria-hidden="true"></button>
+        </div>
+    </div>
+
+    <div class="modal fade" id="pdfViewerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen enc-pdf-viewer-modal__dialog">
+            <div class="modal-content enc-pdf-viewer-modal__content">
+                <div class="modal-header border-0 py-2">
+                    <h6 class="modal-title text-truncate" id="pdfViewerModalTitle">PDF</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
                 </div>
-            </div>
-            <div class="col-lg-6">
-                <div id="previewContainer">
-                    <h5><iconify-icon icon="solar:crop-bold-duotone"></iconify-icon> Aperçu et ajustement</h5>
-                    <p class="text-muted small mb-2">
-                        <iconify-icon icon="solar:cursor-bold-duotone"></iconify-icon>
-                        Glissez les poignées pour ajuster les bordures
-                    </p>
-                    <canvas id="canvas"></canvas>
-                    <div class="crop-controls">
-                        <button id="recaptureButton" type="button" class="btn btn-warning">
-                            <iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>
-                            Recapturer
-                        </button>
-                        <button id="nextStep1" type="button" class="btn btn-success" title="Document 1 page : valide la capture en cours puis continue">
-                            <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
-                            Suivant
-                        </button>
-                    </div>
+                <div class="modal-body enc-pdf-viewer-modal__body p-0" id="pdfViewerModalBody">
+                    <canvas id="pdfViewerModalCanvas" class="enc-pdf-viewer-modal__canvas"></canvas>
+                </div>
+                <div class="modal-footer border-0 py-2 justify-content-center gap-2">
+                    <button type="button" id="pdfViewerModalPrev" class="btn btn-sm btn-light">
+                        <iconify-icon icon="solar:alt-arrow-left-bold"></iconify-icon>
+                    </button>
+                    <span id="pdfViewerModalPageLabel" class="small text-muted px-2">1 / 1</span>
+                    <button type="button" id="pdfViewerModalNext" class="btn btn-sm btn-light">
+                        <iconify-icon icon="solar:alt-arrow-right-bold"></iconify-icon>
+                    </button>
                 </div>
             </div>
         </div>
@@ -121,16 +156,18 @@
                 <div>Extraction en cours… <strong id="ocrProgressText">0%</strong></div>
             </div>
         </div>
-        <div id="ocrPagesToolbar" class="scan-pages-summary scan-pages-summary--compact mb-3" hidden>
-            <span class="scan-pages-summary__count" id="ocrPagesCount"></span>
-            <ul id="scanPagesListOcr" class="scan-pages-summary__list list-unstyled mb-0"></ul>
+        <div id="ocrPagesToolbar" class="enc-pages-gallery mb-3" hidden>
+            <div class="enc-pages-gallery__head">
+                <span id="ocrPagesCount" class="enc-pages-gallery__count"></span>
+            </div>
+            <div id="scanPagesListOcr" class="enc-pages-gallery__strip" role="list"></div>
         </div>
         <div class="mb-3">
             <label class="form-label">Texte extrait</label>
             <textarea id="ocrText" class="form-control" rows="15" placeholder="Le texte extrait du document apparaîtra ici…"></textarea>
             <small class="text-muted d-block mt-1">
                 <iconify-icon icon="solar:pen-2-bold-duotone"></iconify-icon>
-                Vous pouvez modifier le texte ou supprimer une page erronée via la liste ci-dessus
+                Vous pouvez corriger le texte extrait si nécessaire
             </small>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -144,12 +181,55 @@
     </div>
 
     <div id="step3" class="step">
+        <h4><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Informations du document</h4>
+        <div class="alert alert-light border mb-3 py-2 small encodage-step-hint">
+            <iconify-icon icon="solar:pen-bold-duotone"></iconify-icon>
+            Choisissez le type de document en premier : la propriété (single ou multiple) détermine combien de clients vous pourrez associer à l'étape suivante.
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Type de document <span class="text-danger">*</span></label>
+                <select id="docType" class="form-select" required>
+                    <option value="">Sélectionner…</option>
+                </select>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Montant</label>
+                <input type="number" id="docMontant" class="form-control" step="0.01" placeholder="0.00">
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Date d'émission</label>
+                <input type="text" id="docDateEmission" class="form-control encodage-datepicker" placeholder="Sélectionnez un type de document" autocomplete="off">
+                <small id="docDateEmissionHint" class="form-text text-muted">Choisissez d'abord le type de document.</small>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Date d'expiration</label>
+                <input type="text" id="docDateExpiration" class="form-control encodage-datepicker" placeholder="—" autocomplete="off">
+                <small id="docDateExpirationHint" class="form-text text-muted">Calculée automatiquement selon la durée du document.</small>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-4">
+            <button id="prevStep3" type="button" class="btn btn-secondary">
+                <iconify-icon icon="solar:arrow-left-bold-duotone"></iconify-icon> Précédent
+            </button>
+            <button id="saveStep3" type="button" class="btn btn-primary">
+                <iconify-icon icon="solar:diskette-bold-duotone"></iconify-icon> Sauvegarder
+            </button>
+            <button id="nextStep3" type="button" class="btn btn-success">
+                Suivant <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
+            </button>
+        </div>
+    </div>
+
+    <div id="step4" class="step">
         <h4><iconify-icon icon="solar:user-bold-duotone"></iconify-icon> Informations du client</h4>
         <div id="associatedClientsSection" class="mb-4">
             <label class="form-label">Clients associés à cet encodage</label>
             <div id="associatedClientsChips" class="d-flex flex-wrap gap-2 mb-2" aria-live="polite"></div>
             <p id="associatedClientsHint" class="small text-muted mb-0">
-                Ajoutez un ou plusieurs clients. Le type de document (étape suivante) détermine si un seul ou plusieurs clients sont autorisés.
+                Ajoutez un ou plusieurs clients. Le type de document choisi à l'étape précédente détermine si un seul ou plusieurs clients sont autorisés.
             </p>
         </div>
         <div class="mb-4">
@@ -286,49 +366,6 @@
                     </div>
                 </div>
                 <small class="text-muted d-block mt-1">Photo obligatoire via la caméra (reconnaissance faciale après OTP).</small>
-            </div>
-        </div>
-        <div class="d-flex flex-wrap gap-2 mt-4">
-            <button id="prevStep3" type="button" class="btn btn-secondary">
-                <iconify-icon icon="solar:arrow-left-bold-duotone"></iconify-icon> Précédent
-            </button>
-            <button id="saveStep3" type="button" class="btn btn-primary">
-                <iconify-icon icon="solar:diskette-bold-duotone"></iconify-icon> Sauvegarder
-            </button>
-            <button id="nextStep3" type="button" class="btn btn-success">
-                Suivant <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>
-            </button>
-        </div>
-    </div>
-
-    <div id="step4" class="step">
-        <h4><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Informations du document</h4>
-        <div class="alert alert-light border mb-3 py-2 small encodage-step-hint">
-            <iconify-icon icon="solar:pen-bold-duotone"></iconify-icon>
-            Vous pouvez modifier le type, le montant et les dates à tout moment avant la finalisation. Enregistrez puis retournez au récapitulatif avec <strong>Suivant</strong>.
-        </div>
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Type de document <span class="text-danger">*</span></label>
-                <select id="docType" class="form-select" required>
-                    <option value="">Sélectionner…</option>
-                </select>
-            </div>
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Montant</label>
-                <input type="number" id="docMontant" class="form-control" step="0.01" placeholder="0.00">
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Date d'émission</label>
-                <input type="text" id="docDateEmission" class="form-control encodage-datepicker" placeholder="Sélectionnez un type de document" autocomplete="off">
-                <small id="docDateEmissionHint" class="form-text text-muted">Choisissez d'abord le type de document.</small>
-            </div>
-            <div class="col-md-6 mb-3">
-                <label class="form-label">Date d'expiration</label>
-                <input type="text" id="docDateExpiration" class="form-control encodage-datepicker" placeholder="—" autocomplete="off">
-                <small id="docDateExpirationHint" class="form-text text-muted">Calculée automatiquement selon la durée du document.</small>
             </div>
         </div>
         <div class="d-flex flex-wrap gap-2 mt-4">

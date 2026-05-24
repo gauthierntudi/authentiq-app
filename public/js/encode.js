@@ -14,6 +14,8 @@ function encodeApiHeaders(includeJson) {
 
 // Variables globales
 let currentStep = 1;
+/** Étape « Informations client » dans le wizard (après Document). */
+const ENCODAGE_CLIENT_STEP = 4;
 let capturedImageBlob = null;
 let encodageId = null;
 let clientId = null;
@@ -37,9 +39,22 @@ let currentPageIndex = 0;
 // OpenCV / OCR — chargés à la demande (évite ~10 Mo au premier affichage)
 const OPENCV_JS_URL = 'https://docs.opencv.org/4.5.0/opencv.js';
 const TESSERACT_JS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const PDFJS_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const MAX_PDF_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_PDF_PAGES_TOTAL = 100;
 let opencvReady = false;
 let opencvLoadPromise = null;
 let tesseractLoadPromise = null;
+let pdfJsLoadPromise = null;
+let pdfImportInProgress = false;
+/** @type {{ id: string, name: string, pdfDoc: object, pageCount: number }[]} */
+let importedPdfs = [];
+let pdfViewerState = { pdfIndex: 0, pageNum: 1 };
+let pdfViewerModalInstance = null;
+let pdfViewerRenderToken = 0;
+const PDF_VIEWER_PADDING = 16;
+let activeGalleryPageIndex = -1;
 
 // Durée du document sélectionné (pour calcul date expiration)
 let currentDocDuree = 0;
@@ -48,15 +63,16 @@ let clientAwaitingOtp = false;
 let pendingOtpGoNext = false;
 let otpClientIdForVerification = null;
 let encodageStatus = 'incomplete';
-/** Pages scannées modifiées localement sans repasser par OCR + sauvegarde serveur. */
+/** Pages PDF modifiées localement sans repasser par OCR + sauvegarde serveur. */
 let scanPagesDirty = false;
+/** OCR + sauvegarde en cours depuis l'étape 1 (évite double clic Suivant). */
+let ocrPipelineInProgress = false;
 
 let newClientCameraStream = null;
 let encNewClientCroppedBlob = null;
 let encNewClientPreviewUrl = null;
 
 document.addEventListener('DOMContentLoaded', function () {
-    initializeCamera();
     loadDocumentTypes();
     renderAssociatedClientsChips();
     setupEventListeners();
@@ -193,14 +209,24 @@ function clearScanPagesDirty() {
 }
 
 function getStepBlockedMessage(step) {
-    if (!encodageId) {
-        return 'Enregistrez d\'abord au moins une page scannée (étape 1 → Suivant).';
+    if (step === 2) {
+        if (scannedPages.length === 0) {
+            return 'Joignez au moins un PDF avant l\'étape OCR.';
+        }
+
+        return 'Complétez les étapes précédentes avant de continuer.';
     }
-    if (step === 2 && scannedPages.length === 0) {
-        return 'Scannez au moins une page avant l\'étape OCR.';
+    if (!encodageId) {
+        return 'Enregistrez d\'abord les pages via l\'étape 1 (Suivant) avant de continuer.';
     }
     if (scanPagesDirty) {
-        return 'Les pages scannées ont été modifiées. À l\'étape 1, cliquez « Suivant » pour relancer l\'OCR et enregistrer les pages.';
+        return 'Les pages importées ont été modifiées. À l\'étape 1, cliquez « Suivant » pour relancer l\'OCR et enregistrer les pages.';
+    }
+    if (step === 4 && !document.getElementById('docType')?.value) {
+        return 'Sélectionnez et enregistrez d\'abord le type de document (étape 3).';
+    }
+    if (step === 5 && getSelectedDocOwnership() === 'multiple' && associatedClients.length < 2) {
+        return 'Propriété multiple : associez au moins deux clients (étape 4).';
     }
 
     return 'Complétez les étapes précédentes avant de continuer.';
@@ -213,14 +239,30 @@ function canNavigateToStep(step) {
     if (step === 1) {
         return true;
     }
+    if (step === 2) {
+        return scannedPages.length > 0;
+    }
     if (!encodageId) {
         return false;
     }
-    if (scanPagesDirty && step >= 2) {
+    if (scanPagesDirty) {
+        return false;
+    }
+    if (step === 4 && !document.getElementById('docType')?.value) {
+        return false;
+    }
+    if (step === 5 && getSelectedDocOwnership() === 'multiple' && associatedClients.length < 2) {
         return false;
     }
 
     return true;
+}
+
+function setScanStepProcessing(processing) {
+    ocrPipelineInProgress = processing;
+    document.querySelectorAll('#nextStep1, #nextStep1Bar').forEach((btn) => {
+        btn.disabled = processing;
+    });
 }
 
 function bindStepperNavigation() {
@@ -309,12 +351,47 @@ function updateAssociatedClientsHint() {
 
     const ownership = getSelectedDocOwnership();
     if (ownership === 'multiple') {
-        hint.textContent = 'Propriété multiple : associez au moins deux clients à ce document (un seul encodage).';
+        const n = associatedClients.length;
+        if (n >= 2) {
+            hint.textContent = `${n} clients associés. Vous pouvez enregistrer et continuer.`;
+        } else if (n === 1) {
+            hint.textContent = 'Propriété multiple : ajoutez au moins un second client avant de continuer.';
+        } else {
+            hint.textContent = 'Propriété multiple : associez au moins deux clients à ce document (un seul encodage).';
+        }
     } else if (ownership === 'single') {
         hint.textContent = 'Propriété single : un seul client peut être associé à ce document.';
     } else {
-        hint.textContent = 'Ajoutez un ou plusieurs clients. Le type de document (étape suivante) détermine si un seul ou plusieurs clients sont autorisés.';
+        hint.textContent = 'Sélectionnez d\'abord le type de document (étape 3) pour connaître la propriété single ou multiple.';
     }
+}
+
+function projectedAssociatedClientCount(clientType) {
+    if (clientType === 'existing') {
+        return associatedClients.length;
+    }
+
+    return associatedClients.length + 1;
+}
+
+function validateClientStepComplete(andGoNext, { clientType = 'existing', clientCount = null } = {}) {
+    if (!andGoNext) {
+        return true;
+    }
+
+    if (getSelectedDocOwnership() !== 'multiple') {
+        return true;
+    }
+
+    const count = clientCount ?? projectedAssociatedClientCount(clientType);
+    if (count < 2) {
+        iziToast.warning({
+            message: 'Propriété multiple : associez au moins deux clients avant de continuer.',
+        });
+        return false;
+    }
+
+    return true;
 }
 
 function canAddMoreClients() {
@@ -349,6 +426,7 @@ function addAssociatedClient(client) {
     }
 
     renderAssociatedClientsChips();
+    updateAssociatedClientsHint();
 }
 
 function removeAssociatedClient(id) {
@@ -362,6 +440,7 @@ function removeAssociatedClient(id) {
         document.getElementById('clientId').value = '';
     }
     renderAssociatedClientsChips();
+    updateAssociatedClientsHint();
 }
 
 function applyResumedEncodage(data) {
@@ -414,8 +493,8 @@ function applyResumedEncodage(data) {
         calculateExpirationDate();
     }
 
-    if (!enc.id_client) goToStep(3);
-    else if (!enc.id_doc) goToStep(4);
+    if (!enc.id_doc) goToStep(3);
+    else if (!enc.id_client) goToStep(4);
     else {
         loadRecapitulatif();
         goToStep(5);
@@ -574,9 +653,492 @@ function initializeCamera() {
         });
 }
 
+function loadPdfJsOnce() {
+    if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+        return Promise.resolve(window.pdfjsLib);
+    }
+    if (pdfJsLoadPromise) {
+        return pdfJsLoadPromise;
+    }
+
+    pdfJsLoadPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-enc-pdfjs]');
+        if (existing) {
+            const poll = setInterval(() => {
+                if (window.pdfjsLib) {
+                    clearInterval(poll);
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+                    resolve(window.pdfjsLib);
+                }
+            }, 50);
+            setTimeout(() => {
+                clearInterval(poll);
+                if (!window.pdfjsLib) {
+                    reject(new Error('pdf.js timeout'));
+                }
+            }, 15000);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = PDFJS_JS_URL;
+        script.dataset.encPdfjs = '1';
+        script.onload = () => {
+            if (!window.pdfjsLib) {
+                reject(new Error('pdf.js indisponible'));
+                return;
+            }
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+            resolve(window.pdfjsLib);
+        };
+        script.onerror = () => reject(new Error('Impossible de charger pdf.js'));
+        document.head.appendChild(script);
+    });
+
+    return pdfJsLoadPromise;
+}
+
+function setPdfImportProgress(message, visible = true) {
+    const el = document.getElementById('pdfImportProgress');
+    if (!el) return;
+    el.hidden = !visible;
+    el.textContent = message || '';
+}
+
+function isPdfFile(file) {
+    if (!file) return false;
+    const name = (file.name || '').toLowerCase();
+    return file.type === 'application/pdf' || name.endsWith('.pdf');
+}
+
+async function canvasToJpegBlob(canvas, quality = 0.92) {
+    return new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality);
+    });
+}
+
+async function loadPdfDocumentFromFile(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfjsLib = await loadPdfJsOnce();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+    return { pdf, name: file.name };
+}
+
+async function rasterizePdfDocument(pdf, fileName, existingCount = 0) {
+    const scale = 2;
+    const pagesAdded = [];
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+        if (existingCount + pagesAdded.length >= MAX_PDF_PAGES_TOTAL) {
+            throw new Error(`Limite de ${MAX_PDF_PAGES_TOTAL} pages par encodage atteinte.`);
+        }
+
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        await page.render({
+            canvasContext: canvas.getContext('2d'),
+            viewport,
+        }).promise;
+
+        const blob = await canvasToJpegBlob(canvas);
+        if (!blob) {
+            throw new Error(`Impossible de convertir la page ${pageNum} du PDF.`);
+        }
+
+        pagesAdded.push({
+            id_page: null,
+            page_number: null,
+            blob,
+            image: canvas.toDataURL('image/jpeg', 0.92),
+            ocrText: '',
+            _isNewCapture: true,
+            _sourcePdf: fileName,
+            _sourcePdfPage: pageNum,
+        });
+    }
+
+    return pagesAdded;
+}
+
+function getActiveImportedPdf() {
+    return importedPdfs[pdfViewerState.pdfIndex] || null;
+}
+
+function findImportedPdfIndexByName(name) {
+    return importedPdfs.findIndex((p) => p.name === name);
+}
+
+async function renderPdfPageToCanvas(canvas, pdfDoc, pageNum, container) {
+    if (!canvas || !pdfDoc || !container) return;
+
+    const page = await pdfDoc.getPage(pageNum);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const pad = PDF_VIEWER_PADDING;
+    const maxW = Math.max(80, container.clientWidth - pad);
+    const maxH = Math.max(80, container.clientHeight - pad);
+    const fitScale = Math.min(maxW / baseViewport.width, maxH / baseViewport.height);
+    const pixelRatio = window.devicePixelRatio || 1;
+    const renderScale = fitScale * pixelRatio;
+    const viewport = page.getViewport({ scale: renderScale });
+    const context = canvas.getContext('2d');
+
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    canvas.style.width = `${Math.floor(viewport.width / pixelRatio)}px`;
+    canvas.style.height = `${Math.floor(viewport.height / pixelRatio)}px`;
+
+    await page.render({ canvasContext: context, viewport }).promise;
+}
+
+async function renderPdfViewerPanel() {
+    const entry = getActiveImportedPdf();
+    const canvas = document.getElementById('pdfViewerCanvas');
+    const empty = document.getElementById('pdfViewerEmpty');
+    const expandBtn = document.getElementById('pdfViewerExpand');
+    const fileNameEl = document.getElementById('pdfViewerFileName');
+    const controls = document.getElementById('pdfViewerControls');
+
+    if (!entry || !canvas) {
+        if (canvas) canvas.hidden = true;
+        if (empty) empty.hidden = false;
+        if (expandBtn) expandBtn.disabled = true;
+        if (fileNameEl) fileNameEl.textContent = 'Aperçu';
+        if (controls) controls.hidden = true;
+        return;
+    }
+
+    pdfViewerState.pageNum = Math.min(Math.max(1, pdfViewerState.pageNum), entry.pageCount);
+    const token = ++pdfViewerRenderToken;
+
+    if (empty) empty.hidden = true;
+    canvas.hidden = false;
+    if (expandBtn) expandBtn.disabled = false;
+    if (fileNameEl) fileNameEl.textContent = entry.name;
+    if (controls) controls.hidden = false;
+
+    await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, document.getElementById('pdfViewerBody'));
+    if (token !== pdfViewerRenderToken) return;
+
+    updatePdfViewerControls();
+}
+
+async function renderPdfViewerModalCanvas() {
+    const entry = getActiveImportedPdf();
+    const canvas = document.getElementById('pdfViewerModalCanvas');
+    const container = document.getElementById('pdfViewerModalBody');
+    const title = document.getElementById('pdfViewerModalTitle');
+    if (!entry || !canvas || !container) return;
+
+    if (title) title.textContent = entry.name;
+    await renderPdfPageToCanvas(canvas, entry.pdfDoc, pdfViewerState.pageNum, container);
+    updatePdfViewerModalPager();
+}
+
+function updatePdfViewerControls() {
+    const entry = getActiveImportedPdf();
+    const pageLabel = document.getElementById('pdfViewerPageLabel');
+    const select = document.getElementById('pdfViewerFileSelect');
+    const prevBtn = document.getElementById('pdfViewerPrev');
+    const nextBtn = document.getElementById('pdfViewerNext');
+
+    if (!entry) return;
+
+    if (pageLabel) {
+        pageLabel.textContent = `${pdfViewerState.pageNum} / ${entry.pageCount}`;
+    }
+    if (prevBtn) prevBtn.disabled = pdfViewerState.pageNum <= 1;
+    if (nextBtn) nextBtn.disabled = pdfViewerState.pageNum >= entry.pageCount;
+
+    if (select) {
+        select.hidden = importedPdfs.length <= 1;
+        const currentValue = String(pdfViewerState.pdfIndex);
+        if (select.options.length !== importedPdfs.length) {
+            select.innerHTML = importedPdfs.map((p, i) =>
+                `<option value="${i}">${escapeHtml(p.name)}</option>`,
+            ).join('');
+        }
+        select.value = currentValue;
+    }
+}
+
+function updatePdfViewerModalPager() {
+    const entry = getActiveImportedPdf();
+    const label = document.getElementById('pdfViewerModalPageLabel');
+    const prevBtn = document.getElementById('pdfViewerModalPrev');
+    const nextBtn = document.getElementById('pdfViewerModalNext');
+    if (!entry) return;
+
+    if (label) label.textContent = `${pdfViewerState.pageNum} / ${entry.pageCount}`;
+    if (prevBtn) prevBtn.disabled = pdfViewerState.pageNum <= 1;
+    if (nextBtn) nextBtn.disabled = pdfViewerState.pageNum >= entry.pageCount;
+}
+
+function showPdfInViewerByPageIndex(pageIndex) {
+    const page = scannedPages[pageIndex];
+    if (!page?._sourcePdf) return;
+
+    const pdfIndex = findImportedPdfIndexByName(page._sourcePdf);
+    if (pdfIndex < 0) return;
+
+    pdfViewerState.pdfIndex = pdfIndex;
+    pdfViewerState.pageNum = page._sourcePdfPage || 1;
+    renderPdfViewerPanel();
+    highlightPageGalleryThumb(pageIndex);
+}
+
+function highlightPageGalleryThumb(pageIndex) {
+    activeGalleryPageIndex = pageIndex;
+    document.querySelectorAll('.enc-pages-gallery__thumb').forEach((el) => {
+        const idx = parseInt(el.getAttribute('data-view-page-index'), 10);
+        el.classList.toggle('is-active', idx === pageIndex);
+    });
+}
+
+function findScannedPageIndexForViewer() {
+    const entry = getActiveImportedPdf();
+    if (!entry) return -1;
+
+    return scannedPages.findIndex(
+        (p) => p._sourcePdf === entry.name && (p._sourcePdfPage || 1) === pdfViewerState.pageNum,
+    );
+}
+
+function changePdfViewerPage(delta) {
+    const entry = getActiveImportedPdf();
+    if (!entry) return;
+
+    pdfViewerState.pageNum = Math.min(
+        entry.pageCount,
+        Math.max(1, pdfViewerState.pageNum + delta),
+    );
+    renderPdfViewerPanel();
+    const idx = findScannedPageIndexForViewer();
+    if (idx >= 0) highlightPageGalleryThumb(idx);
+    if (pdfViewerModalInstance) {
+        renderPdfViewerModalCanvas();
+    }
+}
+
+function changePdfViewerFile(index) {
+    if (!importedPdfs[index]) return;
+    pdfViewerState.pdfIndex = index;
+    pdfViewerState.pageNum = 1;
+    renderPdfViewerPanel();
+    const idx = findScannedPageIndexForViewer();
+    if (idx >= 0) highlightPageGalleryThumb(idx);
+    if (pdfViewerModalInstance) {
+        renderPdfViewerModalCanvas();
+    }
+}
+
+function openPdfViewerModal() {
+    const entry = getActiveImportedPdf();
+    if (!entry || typeof bootstrap === 'undefined') return;
+
+    const modalEl = document.getElementById('pdfViewerModal');
+    if (!modalEl) return;
+
+    if (!pdfViewerModalInstance) {
+        pdfViewerModalInstance = new bootstrap.Modal(modalEl);
+        modalEl.addEventListener('shown.bs.modal', () => {
+            renderPdfViewerModalCanvas();
+        });
+    }
+
+    pdfViewerModalInstance.show();
+}
+
+function setupPdfViewer() {
+    document.getElementById('pdfViewerExpand')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openPdfViewerModal();
+    });
+
+    document.getElementById('pdfViewerPrev')?.addEventListener('click', () => changePdfViewerPage(-1));
+    document.getElementById('pdfViewerNext')?.addEventListener('click', () => changePdfViewerPage(1));
+    document.getElementById('pdfViewerModalPrev')?.addEventListener('click', () => changePdfViewerPage(-1));
+    document.getElementById('pdfViewerModalNext')?.addEventListener('click', () => changePdfViewerPage(1));
+
+    document.getElementById('pdfViewerFileSelect')?.addEventListener('change', (e) => {
+        changePdfViewerFile(parseInt(e.target.value, 10) || 0);
+    });
+
+    let pdfModalResizeTimer = null;
+    window.addEventListener('resize', () => {
+        if (!pdfViewerModalInstance || !document.getElementById('pdfViewerModal')?.classList.contains('show')) {
+            return;
+        }
+        clearTimeout(pdfModalResizeTimer);
+        pdfModalResizeTimer = setTimeout(() => renderPdfViewerModalCanvas(), 150);
+    });
+
+    document.addEventListener('click', (e) => {
+        const viewBtn = e.target.closest('[data-view-page-index]');
+        if (!viewBtn) return;
+        const index = parseInt(viewBtn.getAttribute('data-view-page-index'), 10);
+        if (!Number.isNaN(index)) {
+            e.preventDefault();
+            showPdfInViewerByPageIndex(index);
+        }
+    });
+}
+
+async function importPdfFile(file) {
+    const { pdf, name } = await loadPdfDocumentFromFile(file);
+    const entry = {
+        id: `pdf-${Date.now()}`,
+        name,
+        pdfDoc: pdf,
+        pageCount: pdf.numPages,
+    };
+    const pages = await rasterizePdfDocument(pdf, name, 0);
+
+    return { entry, pages };
+}
+
+async function handlePdfFiles(fileList) {
+    if (pdfImportInProgress) {
+        iziToast.info({ message: 'Import PDF déjà en cours…' });
+        return;
+    }
+    if (ocrPipelineInProgress) {
+        iziToast.info({ message: 'Patientez la fin du traitement OCR en cours…' });
+        return;
+    }
+
+    const files = Array.from(fileList || []).filter(isPdfFile);
+    if (files.length === 0) {
+        iziToast.warning({ message: 'Sélectionnez un fichier PDF.' });
+        return;
+    }
+
+    if (files.length > 1) {
+        iziToast.info({ message: 'Un seul document par encodage : seul le premier PDF sera importé.' });
+    }
+
+    const file = files[0];
+    if (file.size > MAX_PDF_FILE_BYTES) {
+        iziToast.error({ message: `"${file.name}" dépasse la taille max. de 50 Mo.` });
+        return;
+    }
+
+    const hadPreviousDocument = scannedPages.length > 0 || importedPdfs.length > 0;
+
+    pdfImportInProgress = true;
+    showEncPagesLoader('scanPagesSummary');
+    setPdfImportProgress(hadPreviousDocument ? 'Remplacement du document…' : 'Import du PDF en cours…');
+
+    try {
+        setPdfImportProgress(`Lecture de ${file.name}…`);
+        const { entry, pages } = await importPdfFile(file);
+
+        if (pages.length === 0) {
+            iziToast.warning({ message: 'Aucune page extraite du PDF.' });
+            return;
+        }
+
+        importedPdfs = [entry];
+        scannedPages = pages;
+        pdfViewerState = { pdfIndex: 0, pageNum: 1 };
+        pdfViewerRenderToken += 1;
+
+        const ocrArea = document.getElementById('ocrText');
+        if (ocrArea) {
+            ocrArea.value = '';
+        }
+
+        const ocrProgress = document.getElementById('ocrProgress');
+        if (ocrProgress) {
+            ocrProgress.style.display = 'none';
+        }
+
+        await renderPdfViewerPanel();
+
+        markScanPagesDirty();
+        updateScanPagesUI();
+        highlightPageGalleryThumb(0);
+
+        const pageLabel = pages.length === 1 ? '1 page importée' : `${pages.length} pages importées`;
+        iziToast.success({
+            message: hadPreviousDocument
+                ? `Document remplacé : ${pageLabel}.`
+                : `${pageLabel}.`,
+            timeout: 3000,
+        });
+    } catch (err) {
+        console.error('PDF import:', err);
+        iziToast.error({ message: err.message || 'Erreur lors de l\'import PDF.' });
+    } finally {
+        pdfImportInProgress = false;
+        hideEncPagesLoader('scanPagesSummary');
+        setPdfImportProgress('', false);
+        const input = document.getElementById('pdfFileInput');
+        if (input) input.value = '';
+    }
+}
+
+function setupPdfUpload() {
+    const input = document.getElementById('pdfFileInput');
+    const dropZone = document.getElementById('pdfDropZone');
+    const btnSelect = document.getElementById('btnSelectPdf');
+
+    btnSelect?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        input?.click();
+    });
+
+    dropZone?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnSelectPdf')) return;
+        input?.click();
+    });
+
+    dropZone?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            input?.click();
+        }
+    });
+
+    input?.addEventListener('change', () => {
+        if (input.files?.length) {
+            handlePdfFiles(input.files);
+        }
+    });
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+        dropZone?.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('is-dragover');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+        dropZone?.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('is-dragover');
+        });
+    });
+
+    dropZone?.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files?.length) {
+            handlePdfFiles(files);
+        }
+    });
+
+    setupPdfViewer();
+}
+
 function setupEventListeners() {
-    document.getElementById('captureButton').addEventListener('click', captureImageWithDetection);
-    document.getElementById('recaptureButton').addEventListener('click', recaptureImage);
+    setupPdfUpload();
     document.getElementById('nextStep1')?.addEventListener('click', () => proceedFromScanStep());
     document.getElementById('nextStep1Bar')?.addEventListener('click', () => proceedFromScanStep());
     updateScanPagesUI();
@@ -586,8 +1148,8 @@ function setupEventListeners() {
     document.getElementById('clientType').addEventListener('change', toggleClientType);
     toggleClientType();
     setupClientSearch();
-    document.getElementById('saveStep3').addEventListener('click', saveClientInfo);
-    document.getElementById('nextStep3').addEventListener('click', () => saveClientInfo(true));
+    document.getElementById('saveStep3').addEventListener('click', saveDocumentInfo);
+    document.getElementById('nextStep3').addEventListener('click', () => saveDocumentInfo(true));
 
     document.getElementById('docType').addEventListener('change', loadDocumentInfo);
     try {
@@ -596,16 +1158,13 @@ function setupEventListeners() {
         console.error('Flatpickr encodage:', err);
     }
 
-    document.getElementById('saveStep4').addEventListener('click', saveDocumentInfo);
-    document.getElementById('nextStep4').addEventListener('click', () => saveDocumentInfo(true));
+    document.getElementById('saveStep4').addEventListener('click', saveClientInfo);
+    document.getElementById('nextStep4').addEventListener('click', () => saveClientInfo(true));
 
     document.getElementById('submitBtn')?.addEventListener('click', finalizeEncodage);
 
-    setupScanCameraModal();
-
     bindWizardNavigation();
     bindStepperNavigation();
-    bindScanPageRemoveHandlers();
     syncWizardEditability();
     setupEncodageOtp();
 }
@@ -948,39 +1507,37 @@ function hasPendingCapture() {
     );
 }
 
-function renderScanPagesListHtml() {
+function renderScanPagesGalleryHtml() {
     if (scannedPages.length === 0) {
         return '';
     }
 
-    const canDelete = isEncodageEditable();
-
     return scannedPages
         .map((page, i) => {
-            const label = page.page_number ? `Page ${page.page_number}` : `Page ${i + 1}`;
-            const deleteBtn = canDelete
-                ? `<button type="button" class="btn btn-sm btn-icon rounded-circle scan-pages-summary__remove" data-remove-page-index="${i}" title="Supprimer ${label}" aria-label="Supprimer ${label}">
-                    <iconify-icon icon="solar:trash-bin-trash-bold" aria-hidden="true"></iconify-icon>
-                   </button>`
-                : '';
+            const num = page.page_number || i + 1;
+            const active = i === activeGalleryPageIndex ? ' is-active' : '';
+            const thumbSrc = page.image || '';
+            const thumbInner = thumbSrc
+                ? `<img src="${escapeAttr(thumbSrc)}" alt="" loading="lazy">`
+                : `<span class="enc-pages-gallery__placeholder" aria-hidden="true"><iconify-icon icon="solar:document-bold-duotone"></iconify-icon></span>`;
 
-            return `<li class="scan-pages-summary__item">
-                <span class="scan-pages-summary__label"><iconify-icon icon="solar:document-bold-duotone"></iconify-icon> ${label}</span>
-                ${deleteBtn}
-            </li>`;
+            return `<button type="button" class="enc-pages-gallery__thumb${active}" data-view-page-index="${i}" role="listitem" aria-label="Page ${num}" title="Page ${num}">
+                ${thumbInner}
+                <span class="enc-pages-gallery__badge">${num}</span>
+            </button>`;
         })
         .join('');
 }
 
 function getScanPagesCountLabel(n) {
     if (n === 0) {
-        return 'Aucune page enregistrée';
+        return '';
     }
     if (n === 1) {
-        return '1 page — document à une page (vous pouvez continuer ou en ajouter une autre)';
+        return '1 page importée';
     }
 
-    return `${n} pages enregistrées — document multipages`;
+    return `${n} pages importées`;
 }
 
 function syncOcrTextFromPages() {
@@ -1016,169 +1573,6 @@ function applyServerPagesToScanned(pages) {
     updateScanPagesUI();
 }
 
-function bindScanPageRemoveHandlers() {
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-remove-page-index]');
-        if (!btn) {
-            return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        const index = parseInt(btn.getAttribute('data-remove-page-index'), 10);
-        if (!Number.isNaN(index)) {
-            removeScannedPage(index);
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-remove-recap-page]');
-        if (!btn) {
-            return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        const idPage = parseInt(btn.getAttribute('data-remove-recap-page'), 10);
-        if (Number.isNaN(idPage)) {
-            return;
-        }
-        const index = scannedPages.findIndex((p) => p.id_page === idPage);
-        if (index >= 0) {
-            removeScannedPage(index);
-        } else {
-            removeScannedPageById(idPage);
-        }
-    });
-}
-
-async function removeScannedPage(index) {
-    if (!isEncodageEditable()) {
-        iziToast.info({ message: 'Encodage finalisé : suppression impossible.' });
-
-        return;
-    }
-
-    const page = scannedPages[index];
-    if (!page) {
-        return;
-    }
-
-    if (scannedPages.length <= 1) {
-        iziToast.warning({
-            message: 'Impossible de supprimer la dernière page. L\'encodage doit contenir au moins une page scannée.',
-        });
-
-        return;
-    }
-
-    const label = page.page_number ? `page ${page.page_number}` : `page ${index + 1}`;
-    const okDelete = await AuthentiqConfirm.danger({
-        title: 'Supprimer la page',
-        text: `Supprimer la ${label} ? Cette action est définitive.`,
-    });
-    if (!okDelete) {
-        return;
-    }
-
-    if (encodageId && page.id_page) {
-        const ok = await removeScannedPageOnServer(page.id_page);
-        if (!ok) {
-            return;
-        }
-    } else {
-        scannedPages.splice(index, 1);
-        markScanPagesDirty();
-        syncOcrTextFromPages();
-        updateScanPagesUI();
-        iziToast.success({ message: 'Page retirée.' });
-    }
-
-    if (currentStep === 5 && encodageId) {
-        loadRecapitulatif();
-    }
-}
-
-async function removeScannedPageById(idPage) {
-    if (!encodageId || !idPage) {
-        return;
-    }
-
-    if (scannedPages.length <= 1 && scannedPages.some((p) => p.id_page === idPage)) {
-        iziToast.warning({ message: 'Impossible de supprimer la dernière page.' });
-
-        return;
-    }
-
-    const okDelete = await AuthentiqConfirm.danger({
-        title: 'Supprimer la page',
-        text: 'Supprimer cette page scannée ? Cette action est définitive.',
-    });
-    if (!okDelete) {
-        return;
-    }
-
-    await removeScannedPageOnServer(idPage);
-    if (currentStep === 5 && encodageId) {
-        loadRecapitulatif();
-    }
-}
-
-async function removeScannedPageOnServer(idPage) {
-    const formData = new FormData();
-    formData.append('encodageId', encodageId);
-    formData.append('pageId', idPage);
-
-    showEncPagesLoader('scanPagesSummary');
-
-    try {
-        const response = await fetch(`${ENCODAGE_API}/delete-page`, {
-            method: 'POST',
-            headers: encodeApiHeaders(),
-            body: formData,
-        });
-        const data = await response.json();
-
-        if (response.status === 423 || data.status !== 'success') {
-            iziToast.error({ message: data.message || 'Suppression impossible.' });
-            if (response.status === 423) {
-                setEncodageStatus('complete');
-            }
-
-            return false;
-        }
-
-        if (data.pages) {
-            applyServerPagesToScanned(data.pages);
-        } else {
-            const idx = scannedPages.findIndex((p) => p.id_page === idPage);
-            if (idx >= 0) {
-                scannedPages.splice(idx, 1);
-            }
-            syncOcrTextFromPages();
-            updateScanPagesUI();
-        }
-
-        iziToast.success({ message: data.message || 'Page supprimée.' });
-
-        return true;
-    } catch (err) {
-        console.error('delete-page:', err);
-        iziToast.error({ message: 'Erreur lors de la suppression de la page.' });
-
-        return false;
-    } finally {
-        hideEncPagesLoader('scanPagesSummary');
-    }
-}
-
-function isScanPreviewVisible() {
-    const preview = document.getElementById('previewContainer');
-    if (!preview) {
-        return false;
-    }
-
-    return preview.style.display === 'block';
-}
-
 function syncScanStepNextButton() {
     const actions = document.getElementById('scanStepActions');
     const n = scannedPages.length;
@@ -1186,8 +1580,7 @@ function syncScanStepNextButton() {
         return;
     }
 
-    const showBar = n > 0 && !isScanPreviewVisible();
-    actions.hidden = !showBar;
+    actions.hidden = n === 0;
 }
 
 function updateScanPagesUI() {
@@ -1201,31 +1594,16 @@ function updateScanPagesUI() {
     const validateBtn = document.getElementById('validatePage');
     const n = scannedPages.length;
     const countLabel = getScanPagesCountLabel(n);
-    const listHtml = renderScanPagesListHtml();
+    const galleryHtml = renderScanPagesGalleryHtml();
 
-    if (countEl) {
-        countEl.textContent = countLabel;
-    }
+    if (countEl) countEl.textContent = countLabel;
+    if (ocrCountEl) ocrCountEl.textContent = countLabel;
 
-    if (ocrCountEl) {
-        ocrCountEl.textContent = countLabel;
-    }
+    if (summaryEl) summaryEl.hidden = n === 0;
+    if (ocrToolbar) ocrToolbar.hidden = n === 0;
 
-    if (summaryEl) {
-        summaryEl.classList.toggle('is-single', n === 1);
-    }
-
-    if (ocrToolbar) {
-        ocrToolbar.hidden = n === 0;
-    }
-
-    if (listEl) {
-        listEl.innerHTML = listHtml;
-    }
-
-    if (ocrListEl) {
-        ocrListEl.innerHTML = listHtml;
-    }
+    if (listEl) listEl.innerHTML = galleryHtml;
+    if (ocrListEl) ocrListEl.innerHTML = galleryHtml;
 
     if (addBtn) {
         addBtn.title = n === 0
@@ -1284,20 +1662,23 @@ function commitCurrentCaptureToScan(silent = false) {
 }
 
 function proceedFromScanStep() {
-    const run = async () => {
-        if (hasPendingCapture()) {
-            await commitCurrentCaptureToScan(true);
-        }
-        if (scannedPages.length === 0) {
-            iziToast.warning({
-                message: 'Scannez au moins une page (document une page ou plusieurs). Capturez puis « Valider cette page » ou « Suivant ».',
-            });
-            return;
-        }
-        goToStep(2);
-        processAllPagesOCR();
-    };
-    run();
+    if (pdfImportInProgress) {
+        iziToast.info({ message: 'Patientez pendant l\'import du PDF…' });
+        return;
+    }
+    if (ocrPipelineInProgress) {
+        return;
+    }
+    if (scannedPages.length === 0) {
+        iziToast.warning({
+            message: 'Joignez au moins un PDF scanné (imprimante-scanner) avant de continuer.',
+        });
+        return;
+    }
+    if (!goToStep(2)) {
+        return;
+    }
+    processAllPagesOCR();
 }
 
 function showScanActionButtons() {
@@ -1650,6 +2031,10 @@ function pageNeedsOcr(page) {
 }
 
 async function processAllPagesOCR() {
+    if (ocrPipelineInProgress) {
+        return;
+    }
+    setScanStepProcessing(true);
     showEncPagesLoader('step2');
 
     try {
@@ -1657,6 +2042,7 @@ async function processAllPagesOCR() {
     } catch (err) {
         console.error('Tesseract:', err);
         hideEncPagesLoader('step2');
+        setScanStepProcessing(false);
         iziToast.error({ message: 'Impossible de charger le moteur OCR. Vérifiez votre connexion.' });
         return;
     }
@@ -1784,6 +2170,7 @@ async function saveImageAndOCR() {
         console.error('ensurePageBlobsForUpload:', err);
         iziToast.error({ message: 'Impossible de préparer les fichiers des pages pour l\'envoi.' });
         hideEncPagesLoader('step2');
+        setScanStepProcessing(false);
 
         return;
     }
@@ -1800,6 +2187,7 @@ async function saveImageAndOCR() {
             message: `${missing.length} page(s) sans fichier image. Repassez par l\'étape scan (Suivant).`,
         });
         hideEncPagesLoader('step2');
+        setScanStepProcessing(false);
 
         return;
     }
@@ -1847,7 +2235,10 @@ async function saveImageAndOCR() {
         console.error('Erreur:', error);
         iziToast.error({ message: 'Erreur lors de la sauvegarde.' });
     })
-    .finally(() => hideEncPagesLoader('step2'));
+    .finally(() => {
+        hideEncPagesLoader('step2');
+        setScanStepProcessing(false);
+    });
 }
 
 function loadDocumentTypes() {
@@ -2072,7 +2463,7 @@ function toggleClientType() {
 
 function syncStep3Cameras() {
     const type = document.getElementById('clientType')?.value;
-    if (currentStep !== 3) {
+    if (currentStep !== ENCODAGE_CLIENT_STEP) {
         stopFaceCamera();
         stopNewClientCamera();
         return;
@@ -2294,7 +2685,11 @@ function setupEncodageOtp() {
                     iziToast.success({ message: data.message });
                     if (pendingOtpGoNext) {
                         pendingOtpGoNext = false;
-                        goToStep(4);
+                        if (!validateClientStepComplete(true, { clientCount: associatedClients.length })) {
+                            return;
+                        }
+                        loadRecapitulatif();
+                        goToStep(5);
                     }
                 } else {
                     iziToast.error({ message: data.message });
@@ -2360,6 +2755,8 @@ function handleClientDuplicateResponse(data) {
 }
 
 function performSaveClientInfo(formData, andGoNext = false) {
+    formData.append('completeStep', andGoNext ? '1' : '0');
+
     fetch(`${ENCODAGE_API}/save-client`, {
         method: 'POST',
         headers: encodeApiHeaders(),
@@ -2392,7 +2789,18 @@ function performSaveClientInfo(formData, andGoNext = false) {
                 clientAwaitingOtp = false;
                 pendingOtpGoNext = false;
                 iziToast.success({ message: data.message || 'Informations client sauvegardées.' });
-                if (andGoNext) goToStep(4);
+                if (andGoNext) {
+                    const savedCount = Array.isArray(data.associated_clients)
+                        ? data.associated_clients.length
+                        : (Array.isArray(data.clientIds) ? data.clientIds.length : associatedClients.length);
+                    if (!validateClientStepComplete(true, { clientCount: savedCount })) {
+                        return;
+                    }
+                    loadRecapitulatif();
+                    goToStep(5);
+                } else if (currentStep === 5 && encodageId) {
+                    loadRecapitulatif();
+                }
             } else {
                 iziToast.error({ message: data.message || 'Erreur lors de l\'enregistrement.' });
             }
@@ -2402,7 +2810,13 @@ function performSaveClientInfo(formData, andGoNext = false) {
 
 function saveClientInfo(andGoNext = false) {
     if (!encodageId) {
-        iziToast.warning({ message: 'Enregistrez d\'abord les pages scannées (étape OCR).' });
+        iziToast.warning({ message: 'Importez d\'abord les pages PDF (étape 1).' });
+        return;
+    }
+
+    if (!document.getElementById('docType')?.value) {
+        iziToast.warning({ message: 'Sélectionnez d\'abord le type de document (étape 3).' });
+        goToStep(3);
         return;
     }
 
@@ -2428,6 +2842,9 @@ function saveClientInfo(andGoNext = false) {
             iziToast.warning({ message: 'Ajoutez au moins un client à la liste.' });
             return;
         }
+        if (!validateClientStepComplete(andGoNext, { clientType: 'existing' })) {
+            return;
+        }
         formData.append('clientIds', JSON.stringify(associatedClients.map((c) => c.id_client)));
         performSaveClientInfo(formData, andGoNext);
         return;
@@ -2447,6 +2864,9 @@ function saveClientInfo(andGoNext = false) {
     }
     if (!encNewClientCroppedBlob) {
         iziToast.warning({ message: 'La photo du client est obligatoire. Utilisez la caméra pour capturer le visage.' });
+        return;
+    }
+    if (!validateClientStepComplete(andGoNext, { clientType: 'new' })) {
         return;
     }
     formData.append('clientPhoto', encNewClientCroppedBlob, 'client-photo.jpg');
@@ -2476,10 +2896,8 @@ function saveDocumentInfo(andGoNext = false) {
         iziToast.warning({ message: 'Encodage non initialisé.' });
         return;
     }
-    if (clientAwaitingOtp) {
-        iziToast.warning({ message: 'Activez le client par OTP avant de renseigner le document.' });
-        goToStep(3);
-        if (typeof window.showEncodageOtpModal === 'function') window.showEncodageOtpModal();
+    if (!document.getElementById('docType')?.value) {
+        iziToast.warning({ message: 'Sélectionnez un type de document.' });
         return;
     }
     const formData = new FormData();
@@ -2509,8 +2927,7 @@ function saveDocumentInfo(andGoNext = false) {
                     : 'Document enregistré. Vous pouvez encore modifier avant la finalisation.',
             });
             if (andGoNext) {
-                loadRecapitulatif();
-                goToStep(5);
+                goToStep(4);
             } else if (currentStep === 5 && encodageId) {
                 loadRecapitulatif();
             }
@@ -2553,7 +2970,7 @@ function pollTextractOcr(id) {
 
 function shouldUseFaceCamera() {
     return window.AUTHENTIQ_REKOGNITION_ENABLED
-        && currentStep === 3
+        && currentStep === ENCODAGE_CLIENT_STEP
         && document.getElementById('clientType')?.value === 'existing'
         && document.getElementById('existingClientDiv')?.style.display !== 'none';
 }
@@ -3134,22 +3551,12 @@ function renderRecapitulatifHtml(data) {
         : `<button type="button" class="btn btn-sm btn-light fw-semibold enc-recap-profile__btn" style="border-radius:12px" disabled><iconify-icon icon="solar:letter-bold"></iconify-icon><span>Email</span></button>`;
 
     const sortedPages = pages.slice().sort((a, b) => (a.page_number ?? 0) - (b.page_number ?? 0));
-    const canDeletePages = !isComplete && isEncodageEditable();
-    const galleryCells = sortedPages.slice(0, 6).map((p, i) => {
-        const deleteBtn = canDeletePages && p.id_page
-            ? `<button type="button" class="enc-recap-gallery__delete" data-remove-recap-page="${p.id_page}" title="Supprimer la page ${p.page_number}" aria-label="Supprimer la page">
-                <iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon>
-               </button>`
-            : '';
-
-        return `
+    const galleryCells = sortedPages.slice(0, 6).map((p, i) => `
         <div class="enc-recap-gallery__cell-wrap">
             <button type="button" class="enc-recap-gallery__cell" data-page-index="${i}" title="Voir la page ${p.page_number}">
                 <img src="${escapeAttr(p.file_path)}" alt="Page ${p.page_number}" loading="lazy">
             </button>
-            ${deleteBtn}
-        </div>`;
-    }).join('');
+        </div>`).join('');
     const moreCell = sortedPages.length > 6
         ? `<div class="enc-recap-gallery__cell-wrap">
             <button type="button" class="enc-recap-gallery__cell enc-recap-gallery__cell--more" data-page-index="6" title="Voir les autres pages">
@@ -3158,7 +3565,7 @@ function renderRecapitulatifHtml(data) {
            </div>`
         : '';
     const emptyGallery = pageCount === 0
-        ? '<div class="enc-recap-gallery__empty">Aucune page scannée</div>'
+        ? '<div class="enc-recap-gallery__empty">Aucune page importée</div>'
         : '';
 
     const editActions = isComplete
@@ -3167,13 +3574,13 @@ function renderRecapitulatifHtml(data) {
             <div class="enc-recap-edit-actions" role="group" aria-label="Modifier l'encodage">
                 <span class="enc-recap-edit-actions__label">Modifier avant validation :</span>
                 <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="1">
-                    <iconify-icon icon="solar:camera-bold-duotone"></iconify-icon> Pages scannées
+                    <iconify-icon icon="solar:document-add-bold-duotone"></iconify-icon> Pages PDF
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="3">
-                    <iconify-icon icon="solar:user-bold-duotone"></iconify-icon> Client
+                    <iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Document
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-primary" data-edit-step="4">
-                    <iconify-icon icon="solar:document-bold-duotone"></iconify-icon> Document
+                    <iconify-icon icon="solar:user-bold-duotone"></iconify-icon> Client
                 </button>
             </div>`;
 
@@ -3236,7 +3643,7 @@ function renderRecapitulatifHtml(data) {
                             ${recapInfoItem('solar:wallet-money-bold-duotone', 'Montant', formatEncMontant(enc.montant))}
                             ${recapInfoItem('solar:calendar-bold-duotone', 'Date d\'émission', formatEncDate(enc.date_emission))}
                             ${recapInfoItem('solar:calendar-mark-bold-duotone', 'Date d\'expiration', formatEncDate(enc.date_expiration))}
-                            ${recapInfoItem('solar:gallery-bold-duotone', 'Pages scannées', String(pageCount))}
+                            ${recapInfoItem('solar:gallery-bold-duotone', 'Pages PDF', String(pageCount))}
                         </ul>
                     </div>
                 </article>
@@ -3279,7 +3686,7 @@ function renderRecapitulatifHtml(data) {
                 </article>
                 <article class="enc-recap-tile enc-recap-tile--gallery">
                     <header class="enc-recap-tile__head">
-                        <h5 class="enc-recap-tile__title">Pages scannées</h5>
+                        <h5 class="enc-recap-tile__title">Pages PDF</h5>
                         <span class="enc-recap-tile__count">${pageCount}</span>
                     </header>
                     <div class="enc-recap-gallery__grid">
@@ -3460,18 +3867,23 @@ function syncRecapFinalizeButton(data) {
     const enc = data?.encodage || {};
     const isComplete = enc.status === 'complete';
     const pageCount = data?.pageCount ?? data?.pages?.length ?? 0;
+    const associated = Array.isArray(data?.associated_clients) ? data.associated_clients : [];
+    const clientCount = associated.length || (enc.id_client ? 1 : 0);
     const missingDoc = !enc.id_doc;
-    const missingClient = !enc.id_client;
-    const cannotFinalize = !isComplete && (missingDoc || missingClient || pageCount < 1 || scanPagesDirty);
+    const missingClient = clientCount < 1;
+    const missingMultipleClients = data?.document?.ownership === 'multiple' && clientCount < 2;
+    const cannotFinalize = !isComplete && (missingDoc || missingClient || missingMultipleClients || pageCount < 1 || scanPagesDirty);
     submitBtn.disabled = isComplete || cannotFinalize;
     if (cannotFinalize && !isComplete) {
         submitBtn.title = scanPagesDirty
             ? 'Pages modifiées : repassez par l\'étape scan (Suivant).'
             : missingDoc
-                ? 'Enregistrez le type de document (étape 4).'
+                ? 'Enregistrez le type de document (étape 3).'
+                : missingMultipleClients
+                    ? 'Propriété multiple : associez au moins deux clients (étape 4).'
                 : missingClient
-                    ? 'Associez un client (étape 3).'
-                    : 'Au moins une page scannée requise.';
+                    ? 'Associez un client (étape 4).'
+                    : 'Au moins une page PDF requise.';
     } else {
         submitBtn.removeAttribute('title');
     }
@@ -3559,12 +3971,12 @@ function finalizeEncodage() {
 
 function goToStep(stepNumber) {
     const wizard = document.querySelector('.encodage-wizard');
-    if (!wizard) return;
+    if (!wizard) return false;
 
     if (!canNavigateToStep(stepNumber)) {
         iziToast.warning({ message: getStepBlockedMessage(stepNumber) });
 
-        return;
+        return false;
     }
 
     if (!isEncodageEditable() && stepNumber < 5) {
@@ -3572,7 +3984,7 @@ function goToStep(stepNumber) {
             message: 'Encodage finalisé : les modifications ne sont plus possibles.',
         });
 
-        return;
+        return false;
     }
 
     wizard.querySelectorAll('.step').forEach((step) => step.classList.remove('active'));
@@ -3580,7 +3992,7 @@ function goToStep(stepNumber) {
     const target = wizard.querySelector(`#step${stepNumber}`);
     if (!target) {
         console.error('Étape introuvable:', stepNumber);
-        return;
+        return false;
     }
     target.classList.add('active');
 
@@ -3599,20 +4011,19 @@ function goToStep(stepNumber) {
 
     if (stepNumber === 1) {
         syncScanStepNextButton();
-        if (!document.getElementById('video')?.srcObject) {
-            initializeCamera();
-        }
     }
 
     if (stepNumber === 3) {
+        updateDateFieldsState();
+        stopFaceCamera();
+        stopNewClientCamera();
+    } else if (stepNumber === ENCODAGE_CLIENT_STEP) {
         syncStep3Cameras();
+        updateAssociatedClientsHint();
+        renderAssociatedClientsChips();
     } else {
         stopFaceCamera();
         stopNewClientCamera();
-    }
-
-    if (stepNumber === 4) {
-        updateDateFieldsState();
     }
 
     if (stepNumber === 5 && encodageId) {
@@ -3622,4 +4033,6 @@ function goToStep(stepNumber) {
     window.requestAnimationFrame(() => {
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+
+    return true;
 }

@@ -72,6 +72,12 @@
             });
         }
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
     <script src="{{ asset('js/authentiq-client-duplicate.js') }}?v={{ @filemtime(public_path('js/authentiq-client-duplicate.js')) }}"></script>
     <script src="{{ asset('js/encode.js') }}?v={{ @filemtime(public_path('js/encode.js')) }}"></script>
 </body>

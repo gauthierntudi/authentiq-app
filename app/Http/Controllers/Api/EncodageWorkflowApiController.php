@@ -372,6 +372,13 @@ class EncodageWorkflowApiController extends Controller
             }
 
             $encodage->refresh();
+
+            if ($request->boolean('completeStep')) {
+                if ($error = $this->clientAssociation->validateForFinalize($encodage)) {
+                    return response()->json(['status' => 'error', 'message' => $error], 422);
+                }
+            }
+
             $associatedClients = $this->formatAssociatedClientsPayload($encodage);
 
             return response()->json([
