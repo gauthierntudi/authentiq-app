@@ -45,8 +45,8 @@ class DocumentsLibraryService
 
         if ($clientId !== null && $clientId > 0) {
             $query->where(function (Builder $q) use ($clientId) {
-                $q->where('id_client', $clientId)
-                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('id_client', $clientId));
+                $q->where('ENCODAGES.id_client', $clientId)
+                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('CLIENTS.id_client', $clientId));
             });
         } elseif ($clientId === 0) {
             $query->whereNull('id_client');
@@ -62,7 +62,7 @@ class DocumentsLibraryService
                 $q->where('id_encodage', 'like', $term)
                     ->orWhere('affectation', 'like', $term)
                     ->orWhereHas('client', fn (Builder $c) => $c->where('nom_complet', 'like', $term))
-                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('nom_complet', 'like', $term));
+                    ->orWhereHas('associatedClients', fn (Builder $c) => $c->where('CLIENTS.nom_complet', 'like', $term));
             });
         }
 

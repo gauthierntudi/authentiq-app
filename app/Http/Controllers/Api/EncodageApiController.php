@@ -63,7 +63,7 @@ class EncodageApiController extends Controller
                 $q->where('id_encodage', $search)
                     ->orWhere('affectation', 'like', "%{$search}%")
                     ->orWhereHas('client', fn ($c) => $c->where('nom_complet', 'like', "%{$search}%"))
-                    ->orWhereHas('associatedClients', fn ($c) => $c->where('nom_complet', 'like', "%{$search}%"));
+                    ->orWhereHas('associatedClients', fn ($c) => $c->where('CLIENTS.nom_complet', 'like', "%{$search}%"));
             });
         }
 
