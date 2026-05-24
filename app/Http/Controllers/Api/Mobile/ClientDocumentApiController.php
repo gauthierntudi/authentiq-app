@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Encodage;
+use App\Models\EncodagePage;
 use App\Services\ClientPhotoStorage;
 use App\Services\DocumentStorage;
 use App\Services\DocumentVerifyAuthorizationService;
@@ -12,7 +13,9 @@ use App\Services\EncodageClientAssociationService;
 use App\Support\CurrentClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 /**
  * API mobile Flutter — documents du client, vérification QR, autorisations tierces.
@@ -78,11 +81,52 @@ class ClientDocumentApiController extends Controller
             ->map(fn ($page) => [
                 'id_page' => $page->id_page,
                 'page_number' => $page->page_number,
-                'url' => $this->storage->url($page->file_path),
+                'url' => $this->pageFilePath($id, (int) $page->id_page),
             ])
             ->all();
 
         return response()->json(['status' => 'success', 'document' => $payload]);
+    }
+
+    /** Image d'une page (proxy authentifié — évite URLs S3 / uploads directes). */
+    public function pageFile(int $id, int $pageId): Response|JsonResponse
+    {
+        $client = CurrentClient::get();
+
+        $encodage = Encodage::query()
+            ->whereIn('status', ['complete', 'expired'])
+            ->find($id);
+
+        if (! $encodage || ! $this->verifyAuth->canClientViewEncodage($client, $encodage)) {
+            return response()->json(['status' => 'error', 'message' => 'Document introuvable.'], 404);
+        }
+
+        $page = EncodagePage::query()
+            ->where('id_encodage', $id)
+            ->where('id_page', $pageId)
+            ->first();
+
+        if (! $page || ! $page->file_path) {
+            return response()->json(['status' => 'error', 'message' => 'Page non trouvée.'], 404);
+        }
+
+        $bytes = $this->storage->readBytes($page->file_path);
+        if ($bytes === null || $bytes === '') {
+            return response()->json(['status' => 'error', 'message' => 'Fichier page introuvable.'], 404);
+        }
+
+        $ext = Str::lower(pathinfo($page->file_path, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            default => 'image/jpeg',
+        };
+
+        return response($bytes, 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'private, max-age=300',
+        ]);
     }
 
     /** Documents qu'un autre client a partagés avec moi (autorisations actives). */
@@ -269,6 +313,11 @@ class ClientDocumentApiController extends Controller
         }
 
         return $payload;
+    }
+
+    private function pageFilePath(int $encodageId, int $pageId): string
+    {
+        return "/documents/{$encodageId}/pages/{$pageId}/file";
     }
 
     /** @return array<string, mixed> */
