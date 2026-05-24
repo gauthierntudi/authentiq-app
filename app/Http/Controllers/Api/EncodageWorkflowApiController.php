@@ -508,12 +508,6 @@ class EncodageWorkflowApiController extends Controller
             'date_expiration' => $request->input('docDateExpiration') ?: null,
         ]);
 
-        $encodage->refresh();
-
-        if ($error = $this->clientAssociation->validateForDoc($encodage)) {
-            return response()->json(['status' => 'error', 'message' => $error], 422);
-        }
-
         return response()->json(['status' => 'success', 'message' => 'Document sauvegardé.']);
     }
 
