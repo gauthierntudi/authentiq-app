@@ -52,6 +52,39 @@ class ClientDocumentApiController extends Controller
         return response()->json(['status' => 'success', 'documents' => $items]);
     }
 
+    /** Détail d'un document + pages (consultation autorisée uniquement). */
+    public function show(int $id): JsonResponse
+    {
+        $client = CurrentClient::get();
+
+        $encodage = Encodage::query()
+            ->with([
+                'doc',
+                'commune',
+                'pages' => fn ($q) => $q->orderBy('page_number'),
+                'associatedClients:'.Client::EAGER_SELECT,
+            ])
+            ->whereIn('status', ['complete', 'expired'])
+            ->find($id);
+
+        if (! $encodage || ! $this->verifyAuth->canClientViewEncodage($client, $encodage)) {
+            return response()->json(['status' => 'error', 'message' => 'Document introuvable.'], 404);
+        }
+
+        $payload = $this->documentListPayload($encodage, $client, detailed: true);
+        $payload['pages'] = $encodage->pages
+            ->sortBy('page_number')
+            ->values()
+            ->map(fn ($page) => [
+                'id_page' => $page->id_page,
+                'page_number' => $page->page_number,
+                'url' => $this->storage->url($page->file_path),
+            ])
+            ->all();
+
+        return response()->json(['status' => 'success', 'document' => $payload]);
+    }
+
     /** Documents qu'un autre client a partagés avec moi (autorisations actives). */
     public function sharedWithMe(): JsonResponse
     {
