@@ -338,6 +338,6 @@ class ClientAuthApiController extends Controller
 
         $v = $client->photoCacheVersion() ?? time();
 
-        return url('/api/mobile/client/me/photo').'?v='.$v;
+        return '/me/photo?v='.$v;
     }
 }

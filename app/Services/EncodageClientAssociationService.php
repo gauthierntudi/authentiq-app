@@ -206,7 +206,7 @@ class EncodageClientAssociationService
         if ($forMobile) {
             $v = $client->photoCacheVersion() ?? time();
 
-            return url('/api/mobile/client/clients/'.$client->id_client.'/photo').'?v='.$v;
+            return '/clients/'.$client->id_client.'/photo?v='.$v;
         }
 
         return $photos->photoUrl(

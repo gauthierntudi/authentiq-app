@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Services\ClientPhotoStorage;
 use App\Services\ClientPhotoVerificationService;
+use App\Services\DocumentVerifyAuthorizationService;
 use App\Services\EncodageClientAssociationService;
 use App\Services\RekognitionService;
 use App\Support\CurrentClient;
@@ -21,6 +22,7 @@ class ClientPhotoApiController extends Controller
         private ClientPhotoStorage $photos,
         private RekognitionService $rekognition,
         private EncodageClientAssociationService $clientAssociation,
+        private DocumentVerifyAuthorizationService $verifyAuth,
     ) {}
 
     /** Photo d'un client co-titulaire (Bearer token, même document requis). */
@@ -36,8 +38,7 @@ class ClientPhotoApiController extends Controller
             return response('', 404);
         }
 
-        if ((int) $viewer->id_client !== $id
-            && ! $this->clientAssociation->clientsShareDocument((int) $viewer->id_client, $id)) {
+        if (! $this->verifyAuth->canViewClientPhoto($viewer, $client)) {
             return response('', 403);
         }
 
@@ -143,9 +144,8 @@ class ClientPhotoApiController extends Controller
 
         $client = $client->fresh()->load(['province', 'ville']);
 
-        $v = $client->photoCacheVersion() ?? time();
         $photoUrl = $client->photo
-            ? url('/api/mobile/client/me/photo').'?v='.$v
+            ? '/me/photo?v='.($client->photoCacheVersion() ?? time())
             : null;
 
         return response()->json([

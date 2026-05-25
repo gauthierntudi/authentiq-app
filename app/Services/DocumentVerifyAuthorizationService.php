@@ -105,4 +105,45 @@ class DocumentVerifyAuthorizationService
             ->orderByDesc('id_encodage')
             ->get();
     }
+
+    /** Photo d'un autre client (co-titulaire, bénéficiaire / titulaire d'autorisation, aperçu grant). */
+    public function canViewClientPhoto(Client $viewer, Client $target): bool
+    {
+        if ((int) $viewer->id_client === (int) $target->id_client) {
+            return true;
+        }
+
+        if ($this->clientAssociation->clientsShareDocument((int) $viewer->id_client, (int) $target->id_client)) {
+            return true;
+        }
+
+        if ($this->hasActiveVerifyGrantBetween($viewer, $target)) {
+            return true;
+        }
+
+        // Titulaire principal : aperçu du client avant d'accorder une autorisation de scan.
+        return Encodage::query()
+            ->where('id_client', $viewer->id_client)
+            ->whereIn('status', ['complete', 'expired'])
+            ->exists();
+    }
+
+    private function hasActiveVerifyGrantBetween(Client $a, Client $b): bool
+    {
+        return DocumentVerifyGrant::query()
+            ->whereNull('revoked_at')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->where(function ($q) use ($a, $b) {
+                $q->where(function ($q2) use ($a, $b) {
+                    $q2->where('id_client_owner', $a->id_client)
+                        ->where('id_client_grantee', $b->id_client);
+                })->orWhere(function ($q2) use ($a, $b) {
+                    $q2->where('id_client_owner', $b->id_client)
+                        ->where('id_client_grantee', $a->id_client);
+                });
+            })
+            ->exists();
+    }
 }

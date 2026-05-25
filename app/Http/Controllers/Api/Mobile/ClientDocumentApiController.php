@@ -356,7 +356,7 @@ class ClientDocumentApiController extends Controller
         $photoUrl = null;
         if ($client->photo) {
             $v = $client->photoCacheVersion() ?? time();
-            $photoUrl = url('/api/mobile/client/clients/'.$client->id_client.'/photo').'?v='.$v;
+            $photoUrl = '/clients/'.$client->id_client.'/photo?v='.$v;
         }
 
         return [
