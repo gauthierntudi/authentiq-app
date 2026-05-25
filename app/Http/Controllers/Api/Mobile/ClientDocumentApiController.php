@@ -202,15 +202,41 @@ class ClientDocumentApiController extends Controller
                 'id_grant' => $g->id_grant,
                 'id_encodage' => $g->id_encodage,
                 'numero' => $g->encodage?->numero,
-                'grantee' => [
-                    'id_client' => $g->grantee?->id_client,
-                    'nom_complet' => $g->grantee?->nom_complet,
-                    'tel' => $g->grantee?->tel,
-                ],
+                'grantee' => $this->granteePayload($g->grantee),
                 'expires_at' => $g->expires_at?->toIso8601String(),
-                'is_active' => $g->isActive(),
+                'is_active' => true,
                 'created_at' => $g->created_at?->toIso8601String(),
             ]),
+        ]);
+    }
+
+    /** Recherche un client par téléphone avant d'accorder l'accès (aperçu bottom sheet). */
+    public function lookupGrantee(Request $request): JsonResponse
+    {
+        $owner = CurrentClient::get();
+
+        $validator = Validator::make($request->all(), [
+            'tel' => 'required|regex:/^0\d{9}$/',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 422);
+        }
+
+        $tel = $validator->validated()['tel'];
+        $grantee = Client::query()->where('tel', $tel)->first();
+
+        if (! $grantee) {
+            return response()->json(['status' => 'error', 'message' => 'Client introuvable avec ce numéro.'], 404);
+        }
+
+        if ((int) $grantee->id_client === (int) $owner->id_client) {
+            return response()->json(['status' => 'error', 'message' => 'Vous ne pouvez pas vous autoriser vous-même.'], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'client' => $this->granteePayload($grantee),
         ]);
     }
 
@@ -318,6 +344,27 @@ class ClientDocumentApiController extends Controller
     private function pageFilePath(int $encodageId, int $pageId): string
     {
         return "/documents/{$encodageId}/pages/{$pageId}/file";
+    }
+
+    /** @return array<string, mixed>|null */
+    private function granteePayload(?Client $client): ?array
+    {
+        if (! $client) {
+            return null;
+        }
+
+        $photoUrl = null;
+        if ($client->photo) {
+            $v = $client->photoCacheVersion() ?? time();
+            $photoUrl = url('/api/mobile/client/clients/'.$client->id_client.'/photo').'?v='.$v;
+        }
+
+        return [
+            'id_client' => $client->id_client,
+            'nom_complet' => $client->nom_complet,
+            'tel' => $client->tel,
+            'photo_url' => $photoUrl,
+        ];
     }
 
     /** @return array<string, mixed> */

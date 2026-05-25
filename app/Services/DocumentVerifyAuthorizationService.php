@@ -72,8 +72,12 @@ class DocumentVerifyAuthorizationService
     public function listGrantsForOwner(Client $owner, ?int $encodageId = null)
     {
         return DocumentVerifyGrant::query()
-            ->with(['grantee:id_client,nom_complet,tel', 'encodage:id_encodage,numero'])
+            ->with(['grantee:id_client,nom_complet,tel,photo', 'encodage:id_encodage,numero'])
             ->where('id_client_owner', $owner->id_client)
+            ->whereNull('revoked_at')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
             ->when($encodageId, fn ($q) => $q->where('id_encodage', $encodageId))
             ->orderByDesc('id_grant')
             ->get();

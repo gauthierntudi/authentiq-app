@@ -54,6 +54,7 @@ Route::prefix('mobile/client')->group(function () {
             ->whereNumber('notificationId');
 
         Route::get('/documents', [MobileClientDocumentApiController::class, 'index']);
+        Route::get('/documents/grantee-lookup', [MobileClientDocumentApiController::class, 'lookupGrantee']);
         Route::get('/documents/shared', [MobileClientDocumentApiController::class, 'sharedWithMe']);
         Route::get('/documents/{id}/pages/{pageId}/file', [MobileClientDocumentApiController::class, 'pageFile'])
             ->whereNumber(['id', 'pageId']);
