@@ -40,6 +40,7 @@ class ClientDocumentApiController extends Controller
             ->with([
                 'doc',
                 'commune',
+                'client:'.Client::EAGER_SELECT,
                 'associatedClients:'.Client::EAGER_SELECT,
             ])
             ->whereIn('status', ['complete', 'expired'])
@@ -138,7 +139,11 @@ class ClientDocumentApiController extends Controller
             ->map(function (Encodage $e) use ($client) {
                 $payload = $this->documentListPayload($e, $client, detailed: true);
                 $payload['is_owner'] = false;
-                $payload['owner_nom'] = $e->client?->nom_complet;
+                $owner = $this->granteePayload($e->client);
+                if ($owner !== null) {
+                    $payload['owner_nom'] = $owner['nom_complet'];
+                    $payload['owner_photo_url'] = $owner['photo_url'];
+                }
 
                 return $payload;
             });
@@ -376,6 +381,12 @@ class ClientDocumentApiController extends Controller
             $this->clientPhotos,
             forMobile: true,
         );
+
+        $owner = $this->granteePayload($encodage->client);
+        if ($owner !== null) {
+            $payload['owner_nom'] = $owner['nom_complet'];
+            $payload['owner_photo_url'] = $owner['photo_url'];
+        }
 
         return $payload;
     }
